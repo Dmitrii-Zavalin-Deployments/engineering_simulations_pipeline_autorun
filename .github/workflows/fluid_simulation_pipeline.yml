@@ -1,0 +1,86 @@
+name: Fluid Data Processing and Commit
+
+on:
+  push:
+    branches:
+      - "**"  # Triggers on any branch
+  workflow_dispatch:
+
+jobs:
+  process_fluid_data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"  # Upgraded Python for better compatibility
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install base dependencies
+        run: |
+          # Ensure pyopenvdb is NOT listed in requirements.txt
+          sed -i '/pyopenvdb/d' requirements.txt
+          pip install -r requirements.txt
+
+      - name: Install OpenVDB system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenvdb-dev
+
+      - name: Debug Repository Structure
+        run: ls -R "$GITHUB_WORKSPACE"
+
+      - name: Verify Script Exists
+        run: |
+          if [ ! -f "$GITHUB_WORKSPACE/src/generate_blender_format.py" ]; then
+            echo "❌ Error: generate_blender_format.py not found in src directory!"
+            exit 1
+          fi
+
+      - name: Run script to process fluid data
+        run: python "$GITHUB_WORKSPACE/src/generate_blender_format.py"
+
+      # ✅ Execute Unit & Integration Tests After Output File Generation
+      - name: Run unit tests
+        run: pytest tests/test_input_validation.py --verbose
+
+      - name: Run output validation tests
+        run: pytest tests/test_output_validation.py --verbose
+
+      - name: Run integration tests
+        run: pytest tests/test_conversion_pipeline.py --verbose
+
+      - name: Run Blender import tests
+        run: pytest tests/test_blender_import_validation.py --verbose
+
+      - name: Run advanced Blender validation tests
+        run: pytest tests/test_blender_advanced_validation.py --verbose
+
+      - name: Commit and Push Blender Fluid Parameters to Repository
+        env:
+          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
+          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+        run: |
+          git config --global user.name "${GIT_USER_NAME}"
+          git config --global user.email "${GIT_USER_EMAIL}"
+
+          cd "$GITHUB_WORKSPACE"
+
+          if [ -f "data/testing-input-output/blender_fluid_parameters.json" ]; then
+            git add "data/testing-input-output/blender_fluid_parameters.json"
+            git status
+
+            if [[ $(git diff --cached --quiet; echo $?) -ne 0 ]]; then
+              git commit -m "Auto-update: Added latest Blender fluid parameters"
+              git push origin HEAD
+            else
+              echo "✅ No changes to commit!"
+            fi
+          else
+            echo "❌ No Blender fluid parameters file detected, skipping commit."
+          fi
