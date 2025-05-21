@@ -28,7 +28,7 @@ jobs:
 
       - name: Install base dependencies
         run: |
-          pip install -r requirements.txt || echo "⚠️ Warning: Some dependencies might not be available."
+          pip install -r requirements.txt
 
       - name: Debug Repository Structure
         run: ls -R "$GITHUB_WORKSPACE"
