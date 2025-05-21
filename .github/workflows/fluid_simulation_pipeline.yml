@@ -24,7 +24,6 @@ jobs:
       - name: Install base dependencies
         run: |
           # Ensure pyopenvdb is NOT listed in requirements.txt
-          sed -i '/pyopenvdb/d' requirements.txt
           pip install -r requirements.txt
 
       - name: Install OpenVDB system dependencies
