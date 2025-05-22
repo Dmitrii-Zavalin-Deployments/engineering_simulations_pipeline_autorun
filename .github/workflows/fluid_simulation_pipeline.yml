@@ -21,13 +21,14 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      - name: Install OpenVDB system dependencies
+      - name: Install system dependencies (Keep TBB if needed)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libopenvdb-dev libtbb-dev  # Added TBB for compatibility
+          sudo apt-get install -y libtbb-dev
 
-      - name: Install base dependencies
+      - name: Install base dependencies (NumPy & HDF5 replace PyOpenVDB)
         run: |
+          pip install --upgrade numpy h5py scipy pytest
           pip install -r requirements.txt
 
       - name: Debug Repository Structure
@@ -35,13 +36,15 @@ jobs:
 
       - name: Verify Script Exists
         run: |
-          if [ ! -f "$GITHUB_WORKSPACE/src/generate_blender_format.py" ]; then
-            echo "❌ Error: generate_blender_format.py not found in src directory!"
+          if [ ! -f "$GITHUB_WORKSPACE/src/generate_vdb_format.py" ]; then
+            echo "❌ Error: generate_vdb_format.py not found in src directory!"
             exit 1
           fi
 
-      - name: Run script to process fluid data
-        run: python "$GITHUB_WORKSPACE/src/generate_blender_format.py"
+      - name: Run script to process volumetric VDB data
+        env:
+          OUTPUT_FORMAT: vdb  # Updated output format to Blender-compatible VDB
+        run: python "$GITHUB_WORKSPACE/src/generate_vdb_format.py"
 
       # ✅ Execute Unit & Integration Tests After Output File Generation
       - name: Run unit tests
@@ -53,13 +56,13 @@ jobs:
       - name: Run integration tests
         run: pytest tests/test_conversion_pipeline.py --verbose
 
-      - name: Run Blender import tests
-        run: pytest tests/test_blender_import_validation.py --verbose
+      - name: Run VDB import tests
+        run: pytest tests/test_vdb_import_validation.py --verbose
 
-      - name: Run advanced Blender validation tests
-        run: pytest tests/test_blender_advanced_validation.py --verbose
+      - name: Run advanced VDB validation tests
+        run: pytest tests/test_vdb_advanced_validation.py --verbose
 
-      - name: Commit and Push Blender Fluid Parameters to Repository
+      - name: Commit and Push Volumetric VDB Output to Repository
         env:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
@@ -69,16 +72,16 @@ jobs:
 
           cd "$GITHUB_WORKSPACE"
 
-          if [ -f "data/testing-input-output/blender_fluid_parameters.json" ]; then
-            git add "data/testing-input-output/blender_fluid_parameters.json"
+          if [ -f "data/testing-input-output/fluid_volume.vdb" ]; then
+            git add "data/testing-input-output/fluid_volume.vdb"
             git status
 
             if [[ $(git diff --cached --quiet; echo $?) -ne 0 ]]; then
-              git commit -m "Auto-update: Added latest Blender fluid parameters"
+              git commit -m "Auto-update: Added latest volumetric VDB fluid data"
               git push origin HEAD
             else
               echo "✅ No changes to commit!"
             fi
           else
-            echo "❌ No Blender fluid parameters file detected, skipping commit."
+            echo "❌ No volumetric VDB file detected, skipping commit."
           fi
