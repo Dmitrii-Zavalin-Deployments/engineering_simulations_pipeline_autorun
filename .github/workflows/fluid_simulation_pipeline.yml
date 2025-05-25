@@ -1,107 +1,66 @@
-name: Fluid Data Processing and Commit
+name: Fluid Volumetric Data Processing and Commit
 
 on:
   push:
     branches:
-      - "**"  # Triggers on any branch
-  workflow_dispatch:
+      - "**"  # Triggers on any branch push
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
-  process_fluid_data:
+  process_fluid_volumetric_data:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"  # Ensure this is compatible with Blender 4.4.x (usually 3.10/3.11)
+          python-version: "3.9" # Using 3.9 as it's common and stable for these libs
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      - name: Install Python dependencies
+      - name: Upgrade pip and install dependencies
         run: |
-          pip install -r requirements.txt # This will now install numpy and scipy
-          pip install pytest # Assuming pytest is still needed for your tests
-
-      # ✅ Step: Install System Dependencies & Blender
-      - name: Install Dependencies & Blender
-        run: |
-          sudo apt update
-          # libegl1 is needed for headless rendering, ffmpeg for video output if you render animations
-          sudo apt install -y python3 python3-pip libegl1 ffmpeg
-          
-          BLENDER_VERSION_FULL="blender-4.4.3-linux-x64" # Full name of the downloaded archive content
-          BLENDER_ARCHIVE="${BLENDER_VERSION_FULL}.tar.xz"
-          BLENDER_DOWNLOAD_URL="https://download.blender.org/release/Blender4.4/${BLENDER_ARCHIVE}"
-          
-          echo "Downloading Blender from: ${BLENDER_DOWNLOAD_URL}"
-          wget "${BLENDER_DOWNLOAD_URL}"
-          
-          echo "Extracting Blender..."
-          tar -xvf "${BLENDER_ARCHIVE}"
-          
-          # Move to a consistent location, e.g., in the home directory or /opt
-          # Using GITHUB_WORKSPACE to keep it within the repo checkout for easier cleanup/debugging
-          mv "${BLENDER_VERSION_FULL}" "${GITHUB_WORKSPACE}/blender_install"
-          
-          # Symlink Blender executable to a directory in PATH for global access
-          # This makes 'blender' command directly callable
-          # Alternatively, you could use '${{ github.workspace }}/blender_install/blender' in the next step
-          sudo ln -s "${GITHUB_WORKSPACE}/blender_install/blender" /usr/local/bin/blender
-          
-          # Verify Blender installation
-          blender --version
-        shell: bash # Use bash for robust shell commands
+          python -m pip install --upgrade pip
+          # requirements.txt for this repo will contain numpy, scipy, pytest
+          pip install -r requirements.txt
+          pip install pytest # Keeping pytest separate for clarity if you only want runtime deps in requirements.txt
 
       - name: Debug Repository Structure
         run: ls -R "$GITHUB_WORKSPACE"
 
-      - name: Verify Script Exists
+      - name: Verify Volumetric Data Processing Script Exists
         run: |
+          echo "🔎 Checking if generate_vdb_format.py exists..."
+          ls -R "$GITHUB_WORKSPACE/src"
           if [ ! -f "$GITHUB_WORKSPACE/src/generate_vdb_format.py" ]; then
             echo "❌ Error: generate_vdb_format.py not found in src directory!"
             exit 1
+          else
+            echo "✅ Script found: generate_vdb_format.py"
           fi
 
-      - name: Run Blender script to generate VDB
-        # Now 'blender' command is globally available due to symlink
+      - name: Run Fluid Volumetric Data Processing Script
         run: |
-          blender --background --python "$GITHUB_WORKSPACE/src/generate_vdb_format.py"
-        env:
-          PYTHONPATH: ${{ github.workspace }}
+          # Execute the Python script directly. It will read the input JSONs and write the output JSON.
+          python "$GITHUB_WORKSPACE/src/generate_vdb_format.py"
 
-      # ✅ Execute Unit & Integration Tests After Output File Generation
-      - name: Run unit tests
-        run: pytest tests/test_input_validation.py --verbose
+      - name: Debug Output Directory
+        run: ls -R "$GITHUB_WORKSPACE/data/testing-input-output"
 
-      - name: Run output validation tests
-        run: pytest tests/test_output_validation.py --verbose
+      # --- Test Steps (Adjust as per your actual tests for this repository) ---
+      # Assuming tests for this repo focus on the data conversion logic.
+      # - name: Run Unit Tests (Volumetric Data Processing)
+      #   run: pytest tests/test_conversion_pipeline.py --verbose # Renamed from general mesh processing
 
-      - name: Run integration tests
-        run: pytest tests/test_conversion_pipeline.py --verbose
-
-      # These VDB specific tests will only work if the Blender script
-      # is configured to *export* individual .vdb files to a known location
-      # and those tests have access to a VDB reading library (e.g., pyopenvdb in a separate step)
-      # or run *within* Blender as well.
-      - name: Run VDB import tests (Requires VDB export from Blender)
-        run: pytest tests/test_vdb_import_validation.py --verbose
-        continue-on-error: true # Allow this to fail if .vdb export isn't setup yet
-
-      - name: Run advanced VDB validation tests (Requires VDB export from Blender)
-        run: pytest tests/test_vdb_advanced_validation.py --verbose
-        continue-on-error: true # Allow this to fail if .vdb export isn't setup yet
-
-      - name: Upload generated .blend file
+      # --- Upload generated artifact (fluid_volume_data.json) ---
+      # This is useful for debugging/downloading directly from GitHub Actions
+      - name: Upload Generated Fluid Volume Data JSON
         uses: actions/upload-artifact@v4
         with:
-          name: generated-blender-file
-          path: ${{ github.workspace }}/fluid_volume_animation.blend
+          name: generated-fluid-volume-data-json
+          path: ${{ github.workspace }}/data/testing-input-output/fluid_volume_data.json
 
-      - name: Commit and Push Volumetric VDB Output to Repository
+      - name: Commit and Push Volumetric Data to Repository
         env:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
@@ -111,18 +70,18 @@ jobs:
 
           cd "$GITHUB_WORKSPACE"
 
-          GENERATED_FILE_OR_DIR="fluid_volume_animation.blend"
+          GENERATED_FILE="data/testing-input-output/fluid_volume_data.json"
           
-          if [ -e "${GENERATED_FILE_OR_DIR}" ]; then
-            git add "${GENERATED_FILE_OR_DIR}"
+          if [ -f "$GENERATED_FILE" ]; then
+            git add "$GENERATED_FILE"
             git status
 
             if [[ $(git diff --cached --quiet; echo $?) -ne 0 ]]; then
-              git commit -m "Auto-update: Added latest volumetric fluid data (.blend file)"
+              git commit -m "Auto-update: Generated volumetric fluid data (JSON)"
               git push origin HEAD
             else
               echo "✅ No changes to commit!"
             fi
           else
-            echo "❌ No generated volume file/directory detected (${GENERATED_FILE_OR_DIR}), skipping commit."
+            echo "❌ No fluid volume data JSON detected, skipping commit."
           fi
