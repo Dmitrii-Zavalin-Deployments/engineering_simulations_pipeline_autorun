@@ -1,0 +1,23 @@
+{
+    "boundary_conditions": {
+        "inlet": {
+            "velocity": [1.0, 0.0, 0.0],
+            "pressure": 101325.0
+        },
+        "outlet": {
+            "pressure": 101000.0
+        },
+        "wall": {
+            "no_slip": true
+        }
+    },
+    "fluid_properties": {
+        "density": 1.225,
+        "viscosity": 1.81e-5
+    },
+    "simulation_parameters": {
+        "time_step": 0.01,
+        "total_time": 5.0,
+        "solver": "explicit"
+    }
+}
