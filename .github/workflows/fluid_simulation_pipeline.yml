@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4 # Updated to v4 for better compatibility
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5 # Updated to v5
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.10"  # Use a Python version compatible with Blender 4.x (e.g., 3.10 for Blender 4.1+)
+          python-version: "3.10"  # Ensure this is compatible with Blender 4.4.x (usually 3.10/3.11)
 
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
@@ -26,28 +26,35 @@ jobs:
           pip install -r requirements.txt # This will now install numpy and scipy
           pip install pytest # Assuming pytest is still needed for your tests
 
-      - name: Download and setup Blender (headless)
-        # This uses the official Blender download. Adjust BLENDER_VERSION as needed.
-        # Check https://download.blender.org/release/ for available versions and exact naming.
+      # ✅ Step: Install System Dependencies & Blender
+      - name: Install Dependencies & Blender
         run: |
-          BLENDER_VERSION="4.1" # Example: Change to 4.0, 3.6 LTS, etc.
-          BLENDER_ARCHIVE="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
-          BLENDER_DOWNLOAD_URL="https://download.blender.org/release/Blender${BLENDER_VERSION}/${BLENDER_ARCHIVE}"
+          sudo apt update
+          # libegl1 is needed for headless rendering, ffmpeg for video output if you render animations
+          sudo apt install -y python3 python3-pip libegl1 ffmpeg
+          
+          BLENDER_VERSION_FULL="blender-4.4.3-linux-x64" # Full name of the downloaded archive content
+          BLENDER_ARCHIVE="${BLENDER_VERSION_FULL}.tar.xz"
+          BLENDER_DOWNLOAD_URL="https://download.blender.org/release/Blender4.4/${BLENDER_ARCHIVE}"
           
           echo "Downloading Blender from: ${BLENDER_DOWNLOAD_URL}"
-          curl -L "${BLENDER_DOWNLOAD_URL}" -o "${BLENDER_ARCHIVE}"
-          tar -xf "${BLENDER_ARCHIVE}"
+          wget "${BLENDER_DOWNLOAD_URL}"
           
-          # The extracted directory name is often "blender-X.Y.Z-linux-x64"
-          # Find the exact extracted folder name and move it to a known location
-          # 'ls -d blender-*' finds directories starting with blender-
-          BLENDER_EXTRACTED_DIR=$(ls -d blender-*/ | head -n 1)
-          mv "${BLENDER_EXTRACTED_DIR}" blender_install
+          echo "Extracting Blender..."
+          tar -xvf "${BLENDER_ARCHIVE}"
           
-          # Set the BLENDER_PATH environment variable for subsequent steps
-          echo "BLENDER_PATH=$(pwd)/blender_install" >> "$GITHUB_ENV"
-          echo "Blender installed to: ${{ env.BLENDER_PATH }}"
-        shell: bash # Ensure bash for advanced shell commands
+          # Move to a consistent location, e.g., in the home directory or /opt
+          # Using GITHUB_WORKSPACE to keep it within the repo checkout for easier cleanup/debugging
+          mv "${BLENDER_VERSION_FULL}" "${GITHUB_WORKSPACE}/blender_install"
+          
+          # Symlink Blender executable to a directory in PATH for global access
+          # This makes 'blender' command directly callable
+          # Alternatively, you could use '${{ github.workspace }}/blender_install/blender' in the next step
+          sudo ln -s "${GITHUB_WORKSPACE}/blender_install/blender" /usr/local/bin/blender
+          
+          # Verify Blender installation
+          blender --version
+        shell: bash # Use bash for robust shell commands
 
       - name: Debug Repository Structure
         run: ls -R "$GITHUB_WORKSPACE"
@@ -60,22 +67,13 @@ jobs:
           fi
 
       - name: Run Blender script to generate VDB
-        # This executes your Python script using Blender's Python interpreter
-        # The script itself handles creating dummy JSON data if it doesn't exist
+        # Now 'blender' command is globally available due to symlink
         run: |
-          "${{ env.BLENDER_PATH }}/blender" --background --python "$GITHUB_WORKSPACE/src/generate_vdb_format.py"
+          blender --background --python "$GITHUB_WORKSPACE/src/generate_vdb_format.py"
         env:
-          # Add the project root to PYTHONPATH so your script can find modules if it imports local files
           PYTHONPATH: ${{ github.workspace }}
 
-      # --- VDB Creation is now part of the Blender script output ---
-      # No direct 'Run script to process volumetric VDB data' step needed anymore for Python itself
-
       # ✅ Execute Unit & Integration Tests After Output File Generation
-      # Note: These tests would need to be updated to consume the .blend file
-      # or export .vdb files from Blender for validation, which is an advanced topic.
-      # For now, these tests will likely fail if they expect a direct .vdb file on disk
-      # unless your Blender script is *also* exporting .vdb sequences.
       - name: Run unit tests
         run: pytest tests/test_input_validation.py --verbose
 
@@ -90,9 +88,6 @@ jobs:
       # and those tests have access to a VDB reading library (e.g., pyopenvdb in a separate step)
       # or run *within* Blender as well.
       - name: Run VDB import tests (Requires VDB export from Blender)
-        # This step might need 'pip install pyopenvdb' if it's not run inside Blender
-        # and if the Blender script exports actual .vdb files.
-        # If Blender script only saves .blend, these tests need rethinking.
         run: pytest tests/test_vdb_import_validation.py --verbose
         continue-on-error: true # Allow this to fail if .vdb export isn't setup yet
 
@@ -100,14 +95,12 @@ jobs:
         run: pytest tests/test_vdb_advanced_validation.py --verbose
         continue-on-error: true # Allow this to fail if .vdb export isn't setup yet
 
-      # --- Uploading the generated .blend file ---
       - name: Upload generated .blend file
         uses: actions/upload-artifact@v4
         with:
           name: generated-blender-file
-          path: ${{ github.workspace }}/fluid_volume_animation.blend # This is the output of the Blender script
+          path: ${{ github.workspace }}/fluid_volume_animation.blend
 
-      # --- Commit and Push is now for the .blend file or exported .vdb sequence ---
       - name: Commit and Push Volumetric VDB Output to Repository
         env:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
@@ -118,10 +111,9 @@ jobs:
 
           cd "$GITHUB_WORKSPACE"
 
-          # Now we are looking for the .blend file or the vdb_sequences directory
-          GENERATED_FILE_OR_DIR="fluid_volume_animation.blend" # Or "vdb_sequences" if Blender exports
+          GENERATED_FILE_OR_DIR="fluid_volume_animation.blend"
           
-          if [ -e "${GENERATED_FILE_OR_DIR}" ]; then # -e checks if file or directory exists
+          if [ -e "${GENERATED_FILE_OR_DIR}" ]; then
             git add "${GENERATED_FILE_OR_DIR}"
             git status
 
