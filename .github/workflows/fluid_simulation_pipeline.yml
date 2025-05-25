@@ -13,12 +13,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"  # Ensure this is compatible with Blender 4.4.x (usually 3.10/3.11)
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt # This will now install numpy and scipy
+          pip install pytest # Assuming pytest is still needed for your tests
+
+      # ✅ Step: Install System Dependencies & Blender
       - name: Install Dependencies & Blender
         run: |
           sudo apt update
+          # libegl1 is needed for headless rendering, ffmpeg for video output if you render animations
           sudo apt install -y python3 python3-pip libegl1 ffmpeg
           
-          BLENDER_VERSION_FULL="blender-4.4.3-linux-x64"
+          BLENDER_VERSION_FULL="blender-4.4.3-linux-x64" # Full name of the downloaded archive content
           BLENDER_ARCHIVE="${BLENDER_VERSION_FULL}.tar.xz"
           BLENDER_DOWNLOAD_URL="https://download.blender.org/release/Blender4.4/${BLENDER_ARCHIVE}"
           
@@ -28,31 +43,18 @@ jobs:
           echo "Extracting Blender..."
           tar -xvf "${BLENDER_ARCHIVE}"
           
+          # Move to a consistent location, e.g., in the home directory or /opt
+          # Using GITHUB_WORKSPACE to keep it within the repo checkout for easier cleanup/debugging
           mv "${BLENDER_VERSION_FULL}" "${GITHUB_WORKSPACE}/blender_install"
           
-          echo "BLENDER_PATH=${GITHUB_WORKSPACE}/blender_install" >> "$GITHUB_ENV"
-          
-          # Symlink Blender executable for global access (optional, can use full path later)
+          # Symlink Blender executable to a directory in PATH for global access
+          # This makes 'blender' command directly callable
+          # Alternatively, you could use '${{ github.workspace }}/blender_install/blender' in the next step
           sudo ln -s "${GITHUB_WORKSPACE}/blender_install/blender" /usr/local/bin/blender
           
-          echo "Blender installed to: ${{ env.BLENDER_PATH }}"
-          blender --version # Verify Blender installation
-
-          # --- Install Python dependencies into Blender's Python environment ---
-          echo "Installing Python dependencies into Blender's Python..."
-          # Find Blender's Python executable dynamically. Adjust 'python3.10' if your Blender version uses a different one.
-          BLENDER_PYTHON_EXECUTABLE=$(find "${{ env.BLENDER_PATH }}" -name "python3" -type f -regex ".*python/bin/python3\.1[0-9]$" | head -n 1)
-
-          if [ -z "$BLENDER_PYTHON_EXECUTABLE" ]; then
-            echo "Error: Blender's Python executable not found. Please verify Blender's internal Python path."
-            exit 1
-          fi
-
-          "$BLENDER_PYTHON_EXECUTABLE" -m ensurepip --upgrade
-          "$BLENDER_PYTHON_EXECUTABLE" -m pip install --upgrade pip
-          "$BLENDER_PYTHON_EXECUTABLE" -m pip install numpy scipy pytest # Install needed libs into Blender's Python
-          echo "Python dependencies installed successfully in Blender's Python."
-        shell: bash
+          # Verify Blender installation
+          blender --version
+        shell: bash # Use bash for robust shell commands
 
       - name: Debug Repository Structure
         run: ls -R "$GITHUB_WORKSPACE"
@@ -65,36 +67,33 @@ jobs:
           fi
 
       - name: Run Blender script to generate VDB
+        # Now 'blender' command is globally available due to symlink
         run: |
           blender --background --python "$GITHUB_WORKSPACE/src/generate_vdb_format.py"
         env:
           PYTHONPATH: ${{ github.workspace }}
 
-      # --- COMMENTED OUT: Python dependencies for System Python (for tests) ---
-      # This step is commented out. If you re-enable tests later and they
-      # run using the system's Python, you'll need this back.
-      # - name: Install Python dependencies for System Python (for tests)
-      #   run: |
-      #     python -m pip install numpy scipy pytest
-      #   shell: bash
+      # ✅ Execute Unit & Integration Tests After Output File Generation
+      - name: Run unit tests
+        run: pytest tests/test_input_validation.py --verbose
 
-      # --- COMMENTED OUT: Test Steps ---
-      # - name: Run unit tests
-      #   run: pytest tests/test_input_validation.py --verbose
+      - name: Run output validation tests
+        run: pytest tests/test_output_validation.py --verbose
 
-      # - name: Run output validation tests
-      #   run: pytest tests/test_output_validation.py --verbose
+      - name: Run integration tests
+        run: pytest tests/test_conversion_pipeline.py --verbose
 
-      # - name: Run integration tests
-      #   run: pytest tests/test_conversion_pipeline.py --verbose
+      # These VDB specific tests will only work if the Blender script
+      # is configured to *export* individual .vdb files to a known location
+      # and those tests have access to a VDB reading library (e.g., pyopenvdb in a separate step)
+      # or run *within* Blender as well.
+      - name: Run VDB import tests (Requires VDB export from Blender)
+        run: pytest tests/test_vdb_import_validation.py --verbose
+        continue-on-error: true # Allow this to fail if .vdb export isn't setup yet
 
-      # - name: Run VDB import tests (Requires VDB export from Blender)
-      #   run: pytest tests/test_vdb_import_validation.py --verbose
-      #   continue-on-error: true
-
-      # - name: Run advanced VDB validation tests (Requires VDB export from Blender)
-      #   run: pytest tests/test_vdb_advanced_validation.py --verbose
-      #   continue-on-error: true
+      - name: Run advanced VDB validation tests (Requires VDB export from Blender)
+        run: pytest tests/test_vdb_advanced_validation.py --verbose
+        continue-on-error: true # Allow this to fail if .vdb export isn't setup yet
 
       - name: Upload generated .blend file
         uses: actions/upload-artifact@v4
