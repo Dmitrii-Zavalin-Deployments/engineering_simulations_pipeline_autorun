@@ -39,6 +39,25 @@ jobs:
             echo "✅ Script found: generate_vdb_format.py"
           fi
 
+      - name: Delete All Previous Files in Testing-Input-Output
+        run: |
+          if [ -d "$GITHUB_WORKSPACE/data/testing-input-output/" ]; then
+            rm -rf "$GITHUB_WORKSPACE/data/testing-input-output/*"
+            echo "🗑️ Deleted all files inside data/testing-input-output/."
+          else
+            echo "ℹ️ No previous files found in data/testing-input-output/—proceeding with new generation."
+          fi
+      
+      - name: Make `download_from_dropbox.sh` Executable
+        run: chmod +x src/download_from_dropbox.sh
+  
+      - name: Download Simulation Files from Dropbox
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+        run: src/download_from_dropbox.sh
+
       - name: Run Fluid Volumetric Data Processing Script
         run: |
           # Execute the Python script directly. It will read the input JSONs and write the output JSON.
@@ -54,34 +73,49 @@ jobs:
 
       # --- Upload generated artifact (fluid_volume_data.json) ---
       # This is useful for debugging/downloading directly from GitHub Actions
-      - name: Upload Generated Fluid Volume Data JSON
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-fluid-volume-data-json
-          path: ${{ github.workspace }}/data/testing-input-output/fluid_volume_data.json
-
-      - name: Commit and Push Volumetric Data to Repository
-        env:
-          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
-          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
-        run: |
-          git config --global user.name "${GIT_USER_NAME}"
-          git config --global user.email "${GIT_USER_EMAIL}"
-
-          cd "$GITHUB_WORKSPACE"
-
-          GENERATED_FILE="data/testing-input-output/fluid_volume_data.json"
+      # - name: Upload Generated Fluid Volume Data JSON
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: generated-fluid-volume-data-json
+      #     path: ${{ github.workspace }}/data/testing-input-output/fluid_volume_data.json
+      
+      # - name: Commit and Push Volumetric Data to Repository
+      #   env:
+      #     GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
+      #     GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+      #   run: |
+      #     git config --global user.name "${GIT_USER_NAME}"
+      #     git config --global user.email "${GIT_USER_EMAIL}"
+      
+      #     cd "$GITHUB_WORKSPACE"
+      
+      #     GENERATED_FILE="data/testing-input-output/fluid_volume_data.json"
           
-          if [ -f "$GENERATED_FILE" ]; then
-            git add "$GENERATED_FILE"
-            git status
-
-            if [[ $(git diff --cached --quiet; echo $?) -ne 0 ]]; then
-              git commit -m "Auto-update: Generated volumetric fluid data (JSON)"
-              git push origin HEAD
-            else
-              echo "✅ No changes to commit!"
-            fi
-          else
-            echo "❌ No fluid volume data JSON detected, skipping commit."
-          fi
+      #     if [ -f "$GENERATED_FILE" ]; then
+      #       git add "$GENERATED_FILE"
+      #       git status
+      
+      #       if [[ $(git diff --cached --quiet; echo $?) -ne 0 ]]; then
+      #         git commit -m "Auto-update: Generated volumetric fluid data (JSON)"
+      #         git push origin HEAD
+      #       else
+      #         echo "✅ No changes to commit!"
+      #       fi
+      #     else
+      #       echo "❌ No fluid volume data JSON detected, skipping commit."
+      #     fi
+      
+      - name: Make `upload_to_dropbox.sh` Executable
+        run: chmod +x src/upload_to_dropbox.sh
+  
+      - name: Debug Before Dropbox Upload
+        run: |
+          echo "🔍 Checking directory structure before upload..."
+          ls -R $GITHUB_WORKSPACE
+  
+      - name: Upload Fluid Simulation Input to Dropbox
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+        run: src/upload_to_dropbox.sh
