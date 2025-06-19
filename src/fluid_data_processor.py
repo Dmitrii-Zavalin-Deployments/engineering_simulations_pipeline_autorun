@@ -1,9 +1,10 @@
 import numpy as np
 import datetime
-import os # To get base filenames for metadata
+import os
 
-# Import functions from the new validator and calculator modules
-from data_validators import validate_navier_stokes_data, validate_initial_data
+# Import functions from the new validator modules
+from navier_stokes_validator import validate_navier_stokes_data
+from initial_data_validator import validate_initial_data
 from fluid_calculators import calculate_fluid_properties_at_timestep
 
 def process_fluid_data(navier_stokes_data, initial_data, navier_stokes_filename, initial_data_filename):
@@ -42,11 +43,7 @@ def process_fluid_data(navier_stokes_data, initial_data, navier_stokes_filename,
             t_idx, current_time, velocity_history, pressure_history,
             num_x, num_y, num_z, thermo_model, initial_density, R_specific_gas, gamma, initial_C
         )
-        if step_data is None and t_idx < len(time_points): # Only print if it's a critical error, not just a skipped warning
-            # The calculator prints specific warnings for empty steps,
-            # but None indicates a fatal error for that step or overall.
-            # We need to decide if a single step error should stop the whole process.
-            # For now, if calculate_fluid_properties_at_timestep returns None, we stop.
+        if step_data is None and t_idx < len(time_points):
             print(f"Critical error during calculation for time step {t_idx}. Aborting further processing.")
             return None
         elif step_data is not None:

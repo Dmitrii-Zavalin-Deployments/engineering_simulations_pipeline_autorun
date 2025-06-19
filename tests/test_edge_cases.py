@@ -1,21 +1,45 @@
-import os
-import sys
+# tests/test_edge_cases.py
+
 import pytest
-import json
+import os
+import json # Ensure json is imported for reading output if needed, though not directly for error checks here
 
-# Add src directory to Python path for module discovery
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+# It's better practice to import the function from the package structure
+# assuming 'src' is in your PYTHONPATH (as set up by run.sh or pytest config)
+from src.generate_vdb_format import generate_fluid_volume_data_json
 
-from generate_vdb_format import generate_fluid_volume_data_json
-
-# List of known edge case files + expected error message fragment (or None if flexible)
+# Define a list of test cases: (filename, expected_error_fragment)
 invalid_cases = [
-    ("missing_fields_navier_stokes.json", "time_points"),
-    ("malformed_initial_data.json", "decode"),
+    # Change 'time_points' to 'mesh_info' as it's checked first
+    ("missing_fields_navier_stokes.json", "mesh_info"),
+    # Change 'decode' to 'jsondecodeerror' for better matching
+    ("malformed_initial_data.json", "jsondecodeerror"),
     ("unsupported_model_initial_data.json", "Unsupported"),
-    ("negative_physical_values.json", None),
-    ("empty_velocity_history.json", None)
+    ("negative_physical_values.json", "warning"), # A warning is printed, not a hard error that stops
+    ("empty_velocity_history.json", "Cannot process"), # Updated error message fragment
 ]
+
+@pytest.fixture
+def invalid_input_dir():
+    # Use os.path.join and os.path.dirname to build paths reliably
+    # This assumes tests/data/invalid_input is relative to the root of the project
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "invalid_input")
+
+@pytest.fixture
+def valid_input_dir():
+    # This assumes tests/data/valid_input is relative to the root of the project
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "valid_input")
+
+
+# Update test paths to use the new fixtures
+@pytest.fixture
+def valid_navier_stokes_path(valid_input_dir):
+    return os.path.join(valid_input_dir, "navier_stokes_results.json")
+
+@pytest.fixture
+def valid_initial_data_path(valid_input_dir):
+    return os.path.join(valid_input_dir, "initial_data.json")
+
 
 @pytest.mark.parametrize("filename,expected_error_fragment", invalid_cases)
 def test_edge_case_inputs(
@@ -51,9 +75,9 @@ def test_edge_case_inputs(
             f"Expected error message containing '{expected_error_fragment}', but got:\n"
             f"STDOUT:\n{captured.out}\nSTDERR:\n{captured.err}"
         )
+    # For cases where no specific error fragment is expected, check for no file output
     else:
-        # Optional refinement: check that the file was created (or at least didn't crash)
-        assert True  # Flexible case: script should not raise or terminate unexpectedly
+        assert not output_path.exists(), "Output file created for a case that should have failed."
 
 
 

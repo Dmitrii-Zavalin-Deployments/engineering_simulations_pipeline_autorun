@@ -1,18 +1,40 @@
+# tests/test_io.py
+
 import os
-import sys
 import json
 import pytest
+from src.generate_vdb_format import generate_fluid_volume_data_json
 
-# Add src directory to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+# Fixture to load JSON content (remains as is)
+@pytest.fixture
+def load_json():
+    def _loader(filepath):
+        with open(filepath, 'r') as f:
+            return json.load(f)
+    return _loader
 
-from generate_vdb_format import generate_fluid_volume_data_json
+# New fixtures for reliable pathing in tests
+@pytest.fixture
+def get_test_data_path():
+    """Returns the absolute path to the 'tests/data' directory."""
+    # This gets the directory of the current test file (tests/)
+    current_test_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(current_test_dir, "data")
 
-def test_output_json_structure(tmp_path, load_json):
+@pytest.fixture
+def valid_navier_stokes_path(get_test_data_path):
+    return os.path.join(get_test_data_path, "valid_input", "navier_stokes_results.json")
+
+@pytest.fixture
+def valid_initial_data_path(get_test_data_path):
+    return os.path.join(get_test_data_path, "valid_input", "initial_data.json")
+
+
+def test_output_json_structure(tmp_path, load_json, valid_navier_stokes_path, valid_initial_data_path):
     """Basic I/O test: Ensure that output JSON file is created and has expected keys."""
-    # Paths
-    navier_path = os.path.join("tests", "valid_input", "navier_stokes_results.json")
-    initial_path = os.path.join("tests", "valid_input", "initial_data.json")
+    # Paths are now correctly provided by fixtures
+    navier_path = valid_navier_stokes_path
+    initial_path = valid_initial_data_path
     output_path = tmp_path / "fluid_volume_data.json"
 
     # Run processing function
@@ -21,22 +43,39 @@ def test_output_json_structure(tmp_path, load_json):
     # Confirm file exists
     assert output_path.exists(), "Expected output file not created."
 
-    # Load and inspect structure
-    data = load_json(output_path)
+    # Load output and check structure
+    output_data = load_json(output_path)
 
-    assert "volume_name" in data
-    assert "grid_info" in data
-    assert "time_steps" in data
-    assert isinstance(data["time_steps"], list)
-    assert len(data["time_steps"]) > 0
+    assert "volume_name" in output_data
+    assert "metadata" in output_data
+    assert "grid_info" in output_data
+    assert "time_steps" in output_data
 
-    # Check inner fields in first frame
-    step = data["time_steps"][0]
-    assert "density_data" in step
-    assert "velocity_data" in step
-    assert "temperature_data" in step
-    assert "time" in step
-    assert "frame" in step
+    # Check basic grid_info properties
+    assert "dimensions" in output_data["grid_info"]
+    assert "voxel_size" in output_data["grid_info"]
+    assert "origin" in output_data["grid_info"]
+
+    # Check basic time_steps properties
+    assert isinstance(output_data["time_steps"], list)
+    assert len(output_data["time_steps"]) > 0
+
+    first_step = output_data["time_steps"][0]
+    assert "time" in first_step
+    assert "frame" in first_step
+    assert "density_data" in first_step
+    assert "velocity_data" in first_step
+    assert "temperature_data" in first_step
+
+    # Optional: Check data types or ranges more rigorously if needed
+    assert isinstance(first_step["density_data"], list)
+    assert isinstance(first_step["velocity_data"], list)
+    assert isinstance(first_step["temperature_data"], list)
+
+    # Example: Check that density/velocity/temperature data are not empty if there's actual mesh data
+    assert len(first_step["density_data"]) > 0
+    assert len(first_step["velocity_data"]) > 0
+    assert len(first_step["temperature_data"]) > 0
 
 
 
