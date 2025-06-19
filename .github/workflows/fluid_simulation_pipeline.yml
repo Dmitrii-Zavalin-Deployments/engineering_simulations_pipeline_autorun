@@ -66,10 +66,8 @@ jobs:
       - name: Debug Output Directory
         run: ls -R "$GITHUB_WORKSPACE/data/testing-input-output"
 
-      # --- Test Steps (Adjust as per your actual tests for this repository) ---
-      # Assuming tests for this repo focus on the data conversion logic.
-      # - name: Run Unit Tests (Volumetric Data Processing)
-      #   run: pytest tests/test_conversion_pipeline.py --verbose # Renamed from general mesh processing
+      - name: Run tests
+        run: pytest tests --verbose
 
       # --- Upload generated artifact (fluid_volume_data.json) ---
       # This is useful for debugging/downloading directly from GitHub Actions
