@@ -1,6 +1,13 @@
 import json
-import numpy as np
 import os
+import sys
+# datetime is not directly used here anymore, can be removed if only used by fluid_data_processor
+
+# Add src directory to the Python path for relative imports within src
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
+# Only import the main orchestration function from the updated fluid_data_processor
+from fluid_data_processor import process_fluid_data
 
 def generate_fluid_volume_data_json(
     navier_stokes_results_path,
@@ -10,6 +17,8 @@ def generate_fluid_volume_data_json(
     """
     Processes fluid simulation data to generate volumetric density, velocity,
     and temperature fields per time step and saves them into a structured JSON file.
+
+    Handles file loading/saving and orchestrates the data processing.
 
     Args:
         navier_stokes_results_path (str): Path to the navier_stokes_results.json file.
@@ -24,103 +33,70 @@ def generate_fluid_volume_data_json(
         os.makedirs(output_dir)
         print(f"Created output directory: {output_dir}")
 
-    # Load input data
+    navier_stokes_data = None
+    initial_data = None
+
+    # Load input data with robust error handling
     try:
         with open(navier_stokes_results_path, 'r') as f:
             navier_stokes_data = json.load(f)
+    except FileNotFoundError as e:
+        print(f"Error: Navier-Stokes results file not found: {e}. Please ensure path is correct and file exists.")
+        return
+    except json.JSONDecodeError as e:
+        print(f"Error: Malformed Navier-Stokes results JSON: {e}. Please check file syntax.")
+        return
+    except Exception as e:
+        print(f"Error: An unexpected error occurred while loading Navier-Stokes data: {e}")
+        return
+
+    try:
         with open(initial_data_path, 'r') as f:
             initial_data = json.load(f)
     except FileNotFoundError as e:
-        print(f"Error: Input file not found: {e}. Please ensure paths are correct and files exist.")
+        print(f"Error: Initial data file not found: {e}. Please ensure path is correct and file exists.")
+        return
+    except json.JSONDecodeError as e:
+        print(f"Error: Malformed initial data JSON: {e}. Please check file syntax.")
+        return
+    except Exception as e:
+        print(f"Error: An unexpected error occurred while loading initial data: {e}")
         return
 
-    time_points = np.array(navier_stokes_data['time_points'])
-    nodes_coords = np.array(navier_stokes_data['mesh_info']['nodes_coords'])  # (N, 3) array
-    grid_shape = navier_stokes_data['mesh_info']['grid_shape']  # [Z, Y, X]
-    dx = navier_stokes_data['mesh_info']['dx']
-    dy = navier_stokes_data['mesh_info']['dy']
-    dz = navier_stokes_data['mesh_info']['dz']
+    # Extract original filenames for metadata (before passing to processor)
+    navier_stokes_filename = os.path.basename(navier_stokes_results_path)
+    initial_data_filename = os.path.basename(initial_data_path)
+
+    # Process the loaded data using the orchestrated function
+    output_data = process_fluid_data(navier_stokes_data, initial_data,
+                                     navier_stokes_filename, initial_data_filename)
     
-    velocity_history = navier_stokes_data['velocity_history']  # list of lists, each (N, 3)
-    pressure_history = navier_stokes_data['pressure_history']  # list of lists, each (N,)
+    if output_data is None:
+        print("Final data processing failed. Aborting saving.")
+        return # Return early if processing failed (error message already printed by sub-modules)
 
-    # Fluid properties
-    initial_density = initial_data['fluid_properties']['density']
-    thermodynamics = initial_data['fluid_properties'].get('thermodynamics', {})
-    thermo_model = thermodynamics.get('model', '').lower()
-
-    if thermo_model == 'ideal_gas':
-        R_specific_gas = thermodynamics.get('specific_gas_constant_J_per_kgK')
-        gamma = thermodynamics.get('adiabatic_index_gamma')
-        avg_initial_pressure = np.mean(pressure_history[0])
-        initial_C = avg_initial_pressure / (initial_density ** gamma)
-        print(f"Thermodynamics model: ideal_gas")
-        print(f"Initial reference constant C (P/rho^gamma): {initial_C:.2f}")
-    elif thermo_model == 'incompressible':
-        R_specific_gas = None
-        gamma = None
-        initial_C = None
-        print("Thermodynamics model: incompressible — using constant density and skipping temperature calculation.")
-    else:
-        print(f"Error: Unsupported thermodynamic model '{thermo_model}'.")
+    # Save output data
+    try:
+        print(f"Saving volume data to {output_volume_json_path}")
+        with open(output_volume_json_path, 'w') as f:
+            json.dump(output_data, f, indent=4)
+        print("Volume data JSON created successfully!")
+    except Exception as e:
+        print(f"Error: Failed to save output JSON file: {e}")
         return
 
-    num_z, num_y, num_x = grid_shape
-    grid_origin = nodes_coords[0].tolist()
-
-    time_steps_data = []
-
-    for t_idx, current_time in enumerate(time_points):
-        current_velocities_flat = np.array(velocity_history[t_idx])
-        current_pressures_flat = np.array(pressure_history[t_idx])
-
-        current_velocities_grid = current_velocities_flat.reshape(num_z, num_y, num_x, 3)
-        current_pressures_grid = current_pressures_flat.reshape(num_z, num_y, num_x)
-
-        if thermo_model == 'ideal_gas':
-            density_grid = (current_pressures_grid / initial_C) ** (1 / gamma)
-            temperature_grid = np.where(
-                density_grid > 1e-9,
-                current_pressures_grid / (density_grid * R_specific_gas),
-                0.0
-            )
-        elif thermo_model == 'incompressible':
-            density_grid = np.full_like(current_pressures_grid, initial_density)
-            temperature_grid = np.zeros_like(current_pressures_grid)
-
-        density_data_flat = density_grid.flatten().tolist()
-        velocity_data_flat = current_velocities_grid.reshape(-1, 3).tolist()
-        temperature_data_flat = temperature_grid.flatten().tolist()
-
-        time_steps_data.append({
-            "time": float(current_time),
-            "frame": t_idx,
-            "density_data": density_data_flat,
-            "velocity_data": velocity_data_flat,
-            "temperature_data": temperature_data_flat,
-        })
-
-    output_data = {
-        "volume_name": "FluidVolume",
-        "grid_info": {
-            "dimensions": [num_x, num_y, num_z],
-            "voxel_size": [dx, dy, dz],
-            "origin": grid_origin
-        },
-        "time_steps": time_steps_data
-    }
-
-    print(f"Saving volume data to {output_volume_json_path}")
-    with open(output_volume_json_path, 'w') as f:
-        json.dump(output_data, f, indent=4)
-    print("Volume data JSON created successfully!")
-
-# --- Main execution block ---
+# --- Main execution block for direct script run ---
 if __name__ == "__main__":
     current_script_dir = os.path.dirname(os.path.abspath(__file__))
-    navier_stokes_file = os.path.join(current_script_dir, "../data/testing-input-output/navier_stokes_results.json")
-    initial_data_file = os.path.join(current_script_dir, "../data/testing-input-output/initial_data.json")
+    navier_stokes_file = os.path.join(current_script_dir, "../tests/data/valid_input/navier_stokes_results.json")
+    initial_data_file = os.path.join(current_script_dir, "../tests/data/valid_input/initial_data.json")
     output_volume_json = os.path.join(current_script_dir, "../data/testing-input-output/fluid_volume_data.json")
+
+    main_output_dir = os.path.dirname(output_volume_json)
+    if main_output_dir and not os.path.exists(main_output_dir):
+        os.makedirs(main_output_dir)
+        print(f"Created main output directory for direct run: {main_output_dir}")
+
     generate_fluid_volume_data_json(navier_stokes_file, initial_data_file, output_volume_json)
 
 
