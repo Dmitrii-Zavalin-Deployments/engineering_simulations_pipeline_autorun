@@ -1,11 +1,13 @@
 import numpy as np
 import pytest
-
-from generate_fluid_volume_data_json import generate_fluid_volume_data_json
-
 import os
+import sys
 import json
-import tempfile
+
+# Dynamically add src/ to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+
+from generate_vdb_format import generate_fluid_volume_data_json
 
 @pytest.fixture
 def synthetic_input(tmp_path):
