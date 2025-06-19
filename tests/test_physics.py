@@ -12,32 +12,27 @@ from generate_vdb_format import generate_fluid_volume_data_json
 @pytest.fixture
 def synthetic_input(tmp_path):
     """Creates synthetic valid inputs to isolate physics calculations."""
-    # Create navier_stokes_results.json
+    # Test pressures (representing a doubling each time)
+    pressures = [101325.0, 202650.0, 405300.0]
+
     navier_data = {
         "time_points": [0.01],
         "velocity_history": [
-            [[0.0, 0.0, 0.0],
-             [0.0, 0.0, 0.0],
-             [0.0, 0.0, 0.0]]
+            [[0.0, 0.0, 0.0]] * len(pressures)
         ],
         "pressure_history": [
-            [101325.0, 202650.0, 405300.0]
+            pressures
         ],
         "mesh_info": {
-            "nodes": 3,
-            "nodes_coords": [
-                [0.0, 0.0, 0.0],
-                [0.1, 0.0, 0.0],
-                [0.2, 0.0, 0.0]
-            ],
-            "grid_shape": [1, 1, 3],
+            "nodes": len(pressures),
+            "nodes_coords": [[float(i), 0.0, 0.0] for i in range(len(pressures))],
+            "grid_shape": [1, 1, len(pressures)],
             "dx": 1.0,
             "dy": 1.0,
             "dz": 1.0
         }
     }
 
-    # Create initial_data.json
     initial_data = {
         "fluid_properties": {
             "density": 1.225,
@@ -65,32 +60,31 @@ def synthetic_input(tmp_path):
     with open(initial_path, "w") as f:
         json.dump(initial_data, f, indent=4)
 
-    return str(navier_path), str(initial_path), str(output_path)
+    return str(navier_path), str(initial_path), str(output_path), pressures, initial_data
 
 def test_ideal_gas_density_and_temperature(synthetic_input):
-    navier_path, initial_path, output_path = synthetic_input
+    navier_path, initial_path, output_path, pressures, initial_data = synthetic_input
 
     generate_fluid_volume_data_json(navier_path, initial_path, output_path)
 
     with open(output_path, "r") as f:
         result = json.load(f)
 
-    gamma = 1.4
-    R = 287.0
-    initial_density = 1.225
-    pressures = [101325.0, 202650.0, 405300.0]
-    initial_C = pressures[0] / (initial_density ** gamma)
+    gamma = initial_data["fluid_properties"]["thermodynamics"]["adiabatic_index_gamma"]
+    R = initial_data["fluid_properties"]["thermodynamics"]["specific_gas_constant_J_per_kgK"]
+    rho0 = initial_data["fluid_properties"]["density"]
 
-    expected_densities = [(P / initial_C) ** (1 / gamma) for P in pressures]
-    expected_temperatures = [
-        P / (rho * R) for P, rho in zip(pressures, expected_densities)
-    ]
+    avg_pressure = sum(pressures) / len(pressures)
+    initial_C = avg_pressure / (rho0 ** gamma)
+
+    expected_densities = [(p / initial_C) ** (1 / gamma) for p in pressures]
+    expected_temperatures = [p / (rho * R) for p, rho in zip(pressures, expected_densities)]
 
     out_density = result["time_steps"][0]["density_data"]
     out_temperature = result["time_steps"][0]["temperature_data"]
 
-    assert np.allclose(out_density, expected_densities, rtol=1e-5), "Density mismatch"
-    assert np.allclose(out_temperature, expected_temperatures, rtol=1e-5), "Temperature mismatch"
+    assert np.allclose(out_density, expected_densities, rtol=1e-5), f"Density mismatch.\nExpected: {expected_densities}\nGot: {out_density}"
+    assert np.allclose(out_temperature, expected_temperatures, rtol=1e-5), f"Temperature mismatch.\nExpected: {expected_temperatures}\nGot: {out_temperature}"
 
 
 
