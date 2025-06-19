@@ -4,7 +4,7 @@ import os
 import sys
 import json
 
-# Dynamically add src/ to the Python path
+# Add src directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from generate_vdb_format import generate_fluid_volume_data_json
@@ -30,11 +30,11 @@ def synthetic_input(tmp_path):
                 [0.1, 0.0, 0.0],
                 [0.2, 0.0, 0.0]
             ],
-            "grid_shape": [1, 1, 3]
-        },
-        "dx": 1.0,
-        "dy": 1.0,
-        "dz": 1.0
+            "grid_shape": [1, 1, 3],
+            "dx": 1.0,
+            "dy": 1.0,
+            "dz": 1.0
+        }
     }
 
     # Create initial_data.json
