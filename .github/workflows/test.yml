@@ -10,19 +10,46 @@ jobs:
     steps:
       - name: Set up SSH agent with deploy key
         run: |
+          echo "🔧 Creating .ssh directory..."
           mkdir -p ~/.ssh
+
+          echo "🔧 Writing private key to temp_deploy_key..."
           echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/temp_deploy_key
           chmod 600 ~/.ssh/temp_deploy_key
 
+          echo "🔧 Starting ssh-agent..."
           eval "$(ssh-agent -s)"
+
+          echo "🔧 Adding key to agent..."
           ssh-add ~/.ssh/temp_deploy_key
 
+          echo "🔧 Verifying key fingerprint..."
+          ssh-keygen -lf ~/.ssh/temp_deploy_key || echo "❌ Failed to read key fingerprint"
+
+          echo "🔧 Scanning GitHub host key..."
           ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+          echo "🔧 Listing known hosts:"
+          cat ~/.ssh/known_hosts
+
+          echo "🔧 Listing loaded SSH identities:"
+          ssh-add -l || echo "❌ No identities loaded"
         env:
           SSH_AUTH_SOCK: /tmp/ssh-auth.sock
+
+      - name: Test SSH connection to GitHub
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh-auth.sock
+        run: |
+          echo "🔍 Testing SSH connection to GitHub..."
+          ssh -T git@github.com || echo "❌ SSH test failed"
 
       - name: Clone target repository
         env:
           SSH_AUTH_SOCK: /tmp/ssh-auth.sock
         run: |
-          git clone git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred.git
+          echo "📦 Attempting to clone repository..."
+          git clone git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred.git || echo "❌ Git clone failed"
+
+
+
