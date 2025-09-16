@@ -46,14 +46,57 @@ jobs:
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
         run: src/download_from_dropbox.sh
 
+      - name: Set up SSH key for Git access
+        if: steps.flag_check.outputs.enabled == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Verify GitHub SSH Host Fingerprint
+        if: steps.flag_check.outputs.enabled == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
       - name: Run Orchestration Script
         if: steps.flag_check.outputs.enabled == 'true'
         run: |
-          if [ -f src/orchestrate.py ]; then
-            python src/orchestrate.py
+          INPUT_DIR="data/testing-input-output"
+          STEP_COUNT=$(find "$INPUT_DIR" -maxdepth 1 -name "*.step" | wc -l)
+          FLOW_PRESENT=$(test -f "$INPUT_DIR/flow_data.json" && echo "yes" || echo "no")
+          OTHER_COUNT=$(find "$INPUT_DIR" -maxdepth 1 -type f ! -name "*.step" ! -name "flow_data.json" | wc -l)
+
+          if [ "$STEP_COUNT" -ge 1 ] && [ "$FLOW_PRESENT" = "yes" ] && [ "$OTHER_COUNT" -eq 0 ]; then
+            echo "✅ Valid input detected. Triggering downstream repositories..."
+
+            REPOSITORIES=(
+              "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred.git"
+              "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred.git"
+              "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred.git"
+            )
+
+            for REPO_URL in "${REPOSITORIES[@]}"; do
+              REPO_NAME=$(basename "$REPO_URL" .git)
+              echo "Processing repository: $REPO_NAME"
+
+              git clone "$REPO_URL" || { echo "❌ Failed to clone $REPO_NAME"; continue; }
+
+              TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S.%3N")
+              echo "$TIMESTAMP" >> "$REPO_NAME/trigger.txt"
+
+              cd "$REPO_NAME" || continue
+              git add trigger.txt
+              git commit -m "Triggering the engineering simulations pipeline at $TIMESTAMP"
+              git push || echo "❌ Push failed for $REPO_NAME"
+              cd ..
+              rm -rf "$REPO_NAME"
+            done
           else
-            echo "⚠️ Warning: src/orchestrate.py not found. Skipping orchestration step."
+            echo "⚠️ Input files not valid. Skipping orchestration."
           fi
+        env:
+          GIT_SSH_COMMAND: "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes"
 
 
 
