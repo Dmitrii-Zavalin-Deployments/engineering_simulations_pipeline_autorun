@@ -46,13 +46,19 @@ jobs:
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
         run: src/download_from_dropbox.sh
 
-      - name: Inject SSH key into agent (no file write)
+      - name: Set up SSH agent with temporary key file
         if: steps.flag_check.outputs.enabled == 'true'
         run: |
           mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/temp_deploy_key
+          chmod 600 ~/.ssh/temp_deploy_key
+
           eval "$(ssh-agent -s)"
-          echo "${{ secrets.DEPLOY_KEY }}" | ssh-add -
+          ssh-add ~/.ssh/temp_deploy_key
+
           ssh-keyscan github.com >> ~/.ssh/known_hosts
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh-auth.sock
 
       - name: Configure Git Identity
         if: steps.flag_check.outputs.enabled == 'true'
@@ -106,6 +112,9 @@ jobs:
              [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
             trigger_repo "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_input_builder_sred.git"
           fi
+
+          # Cleanup temporary key file
+          rm -f ~/.ssh/temp_deploy_key
 
 
 
