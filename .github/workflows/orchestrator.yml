@@ -59,41 +59,49 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-      - name: Run Orchestration Script
+      - name: Run Modular Orchestration
         if: steps.flag_check.outputs.enabled == 'true'
         run: |
           INPUT_DIR="data/testing-input-output"
-          STEP_COUNT=$(find "$INPUT_DIR" -maxdepth 1 -name "*.step" | wc -l)
-          FLOW_PRESENT=$(test -f "$INPUT_DIR/flow_data.json" && echo "yes" || echo "no")
-          OTHER_COUNT=$(find "$INPUT_DIR" -maxdepth 1 -type f ! -name "*.step" ! -name "flow_data.json" | wc -l)
+          TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S.%3N")
 
-          if [ "$STEP_COUNT" -ge 1 ] && [ "$FLOW_PRESENT" = "yes" ] && [ "$OTHER_COUNT" -eq 0 ]; then
-            echo "✅ Valid input detected. Triggering downstream repositories..."
+          trigger_repo() {
+            REPO_URL="$1"
+            REPO_NAME=$(basename "$REPO_URL" .git)
+            echo "🔁 Triggering: $REPO_NAME"
 
-            REPOSITORIES=(
-              "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred.git"
-              "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred.git"
-              "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred.git"
-            )
+            git clone "$REPO_URL" || { echo "❌ Failed to clone $REPO_NAME"; return; }
+            echo "$TIMESTAMP" >> "$REPO_NAME/trigger.txt"
 
-            for REPO_URL in "${REPOSITORIES[@]}"; do
-              REPO_NAME=$(basename "$REPO_URL" .git)
-              echo "Processing repository: $REPO_NAME"
+            cd "$REPO_NAME" || return
+            git add trigger.txt
+            git commit -m "Triggered at $TIMESTAMP"
+            git push || echo "❌ Push failed for $REPO_NAME"
+            cd ..
+            rm -rf "$REPO_NAME"
+          }
 
-              git clone "$REPO_URL" || { echo "❌ Failed to clone $REPO_NAME"; continue; }
+          # Domain Grid Trigger
+          if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/enriched_metadata.json" ]; then
+            trigger_repo "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred.git"
+          fi
 
-              TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S.%3N")
-              echo "$TIMESTAMP" >> "$REPO_NAME/trigger.txt"
+          # Boundary Mapping Trigger
+          if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
+            trigger_repo "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred.git"
+          fi
 
-              cd "$REPO_NAME" || continue
-              git add trigger.txt
-              git commit -m "Triggering the engineering simulations pipeline at $TIMESTAMP"
-              git push || echo "❌ Push failed for $REPO_NAME"
-              cd ..
-              rm -rf "$REPO_NAME"
-            done
-          else
-            echo "⚠️ Input files not valid. Skipping orchestration."
+          # Geometry Masking Trigger
+          if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/geometry_masking_gmsh.json" ]; then
+            trigger_repo "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred.git"
+          fi
+
+          # Input Builder Trigger
+          if [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
+             [ -f "$INPUT_DIR/boundary_conditions_gmsh.json" ] && \
+             [ -f "$INPUT_DIR/geometry_masking_gmsh.json" ] && \
+             [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
+            trigger_repo "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_input_builder_sred.git"
           fi
         env:
           GIT_SSH_COMMAND: "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes"
