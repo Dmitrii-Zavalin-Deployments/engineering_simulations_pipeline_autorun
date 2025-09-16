@@ -46,18 +46,14 @@ jobs:
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
         run: src/download_from_dropbox.sh
 
-      - name: Set up SSH key for Git access
+      - name: Inject SSH key into agent (no file write)
         if: steps.flag_check.outputs.enabled == 'true'
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-
-      - name: Verify GitHub SSH Host Fingerprint
-        if: steps.flag_check.outputs.enabled == 'true'
-        run: |
-          mkdir -p ~/.ssh
+          eval "$(ssh-agent -s)"
+          echo "${{ secrets.DEPLOY_KEY }}" | ssh-add -
           ssh-keyscan github.com >> ~/.ssh/known_hosts
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh-auth.sock
 
       - name: Configure Git Identity
         if: steps.flag_check.outputs.enabled == 'true'
@@ -67,6 +63,8 @@ jobs:
 
       - name: Run Modular Orchestration
         if: steps.flag_check.outputs.enabled == 'true'
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh-auth.sock
         run: |
           INPUT_DIR="data/testing-input-output"
           TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S.%3N")
@@ -109,8 +107,6 @@ jobs:
              [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
             trigger_repo "git@github.com:Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_input_builder_sred.git"
           fi
-        env:
-          GIT_SSH_COMMAND: "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes"
 
 
 
