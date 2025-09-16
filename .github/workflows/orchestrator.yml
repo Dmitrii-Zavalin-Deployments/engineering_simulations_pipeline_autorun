@@ -49,11 +49,10 @@ jobs:
       - name: Inject SSH key into agent (no file write)
         if: steps.flag_check.outputs.enabled == 'true'
         run: |
+          mkdir -p ~/.ssh
           eval "$(ssh-agent -s)"
           echo "${{ secrets.DEPLOY_KEY }}" | ssh-add -
           ssh-keyscan github.com >> ~/.ssh/known_hosts
-        env:
-          SSH_AUTH_SOCK: /tmp/ssh-auth.sock
 
       - name: Configure Git Identity
         if: steps.flag_check.outputs.enabled == 'true'
