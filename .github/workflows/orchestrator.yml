@@ -1,0 +1,60 @@
+name: Orchestrator
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"  # Runs every 5 minutes
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  orchestrate-simulation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Make Dropbox Script Executable
+        run: chmod +x src/download_from_dropbox.sh
+
+      - name: Download Files from Dropbox
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+        run: src/download_from_dropbox.sh
+
+      - name: Run Orchestration Script
+        run: python src/orchestrate.py
+
+      - name: Disable Future Polling (Comment out schedule block)
+        run: |
+          echo "🔧 Commenting out schedule block in orchestrator.yml..."
+          sed -i '/^  schedule:/,/^  workflow_dispatch:/ s/^/#/' .github/workflows/orchestrator.yml
+
+          echo "🔐 Configuring Git identity..."
+          git config --global user.name "${{ secrets.GIT_USER_NAME }}"
+          git config --global user.email "${{ secrets.GIT_USER_EMAIL }}"
+
+          echo "📦 Staging orchestrator.yml for commit..."
+          git add .github/workflows/orchestrator.yml
+
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "✅ No changes to commit. Schedule block already disabled or unchanged."
+          else
+            git commit -m "🛑 Disable schedule block after successful orchestration"
+            git push
+          fi
+
+
+
