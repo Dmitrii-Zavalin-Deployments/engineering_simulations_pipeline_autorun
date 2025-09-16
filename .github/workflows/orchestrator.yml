@@ -1,12 +1,12 @@
 name: Orchestrator
 
 on:
-  push:
-    branches:
-      - "**"  # Triggers on any branch push
   schedule:
     - cron: "*/5 * * * *"  # Runs every 5 minutes
   workflow_dispatch:  # Allows manual trigger
+  push:
+    branches:
+      - "**"
 
 jobs:
   orchestrate-simulation:
@@ -37,25 +37,40 @@ jobs:
         run: src/download_from_dropbox.sh
 
       - name: Run Orchestration Script
-        run: python src/orchestrate.py
-
-      - name: Disable Future Polling (Comment out schedule block)
         run: |
-          echo "🔧 Commenting out schedule block in orchestrator.yml..."
-          sed -i '/^  schedule:/,/^  workflow_dispatch:/ s/^/#/' .github/workflows/orchestrator.yml
+          if [ -f src/orchestrate.py ]; then
+            python src/orchestrate.py
+          else
+            echo "⚠️ Warning: src/orchestrate.py not found. Skipping orchestration step."
+          fi
 
+      - name: Rename Workflow File to Disable Polling
+        run: |
+          WORKFLOW_DIR=".github/workflows"
+          ORIGINAL_FILE="orchestrator.yml"
+          DISABLED_FILE="orchestrator.yml.disabled"
+
+          if [ -f "$WORKFLOW_DIR/$ORIGINAL_FILE" ]; then
+            echo "🔧 Renaming $ORIGINAL_FILE to $DISABLED_FILE..."
+            mv "$WORKFLOW_DIR/$ORIGINAL_FILE" "$WORKFLOW_DIR/$DISABLED_FILE"
+          else
+            echo "⚠️ $ORIGINAL_FILE not found in $WORKFLOW_DIR. Nothing to rename."
+          fi
+
+      - name: Commit Renamed Workflow File
+        run: |
           echo "🔐 Configuring Git identity..."
           git config --global user.name "${{ secrets.GIT_USER_NAME }}"
           git config --global user.email "${{ secrets.GIT_USER_EMAIL }}"
 
-          echo "📦 Staging orchestrator.yml for commit..."
-          git add .github/workflows/orchestrator.yml
+          echo "📦 Staging renamed workflow file for commit..."
+          git add .github/workflows/orchestrator.yml.disabled .github/workflows/orchestrator.yml
 
           # Check if there are any changes to commit
           if git diff --staged --quiet; then
-            echo "✅ No changes to commit. Schedule block already disabled or unchanged."
+            echo "✅ No changes to commit. File may already be renamed."
           else
-            git commit -m "🛑 Disable schedule block after successful orchestration"
+            git commit -m "🛑 Disable orchestrator workflow by renaming to .disabled"
             git push
           fi
 
