@@ -49,6 +49,12 @@ jobs:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         run: |
+          
+          # Configure Git and commit changes
+          git config --global user.name "${GIT_USER_NAME}"
+          git config --global user.email "${GIT_USER_EMAIL}"
+          git pull --rebase origin main || echo "⚠️ Pull failed or not needed"
+          
           TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
           
           # Update orchestrator_config.json
@@ -59,10 +65,6 @@ jobs:
           echo "" >> README.md
           echo "🕒 The orchestrator_config.json flag was updated from true to false on $TIMESTAMP by '${{ github.actor }}' via '${{ github.event_name }}'." >> README.md
 
-          # Configure Git and commit changes
-          git config --global user.name "${GIT_USER_NAME}"
-          git config --global user.email "${GIT_USER_EMAIL}"
-          git pull --rebase origin main || echo "⚠️ Pull failed or not needed"
           git add config/orchestrator_config.json README.md
           git commit -m "Disable orchestrator and log update on $TIMESTAMP"
           git push origin main
