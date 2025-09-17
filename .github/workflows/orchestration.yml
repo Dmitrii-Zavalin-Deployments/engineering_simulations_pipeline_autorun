@@ -49,22 +49,30 @@ jobs:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         run: |
-          
-          # Configure Git and commit changes
+          # Configure Git
           git config --global user.name "${GIT_USER_NAME}"
           git config --global user.email "${GIT_USER_EMAIL}"
+
+          # Stash any local changes to avoid rebase conflict
+          git stash --include-untracked || echo "⚠️ Nothing to stash"
+
+          # Pull latest changes safely
           git pull --rebase origin main || echo "⚠️ Pull failed or not needed"
-          
+
+          # Restore stashed changes
+          git stash pop || echo "⚠️ Nothing to pop"
+
           TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-          
+
           # Update orchestrator_config.json
-          echo "{ \"enabled\": false }" > config/orchestrator_config.json
+          echo '{ "enabled": false }' > config/orchestrator_config.json
 
           # Update README.md with timestamped log
           echo "# engineering_simulations_pipeline_autorun" > README.md
           echo "" >> README.md
           echo "🕒 The orchestrator_config.json flag was updated from true to false on $TIMESTAMP by '${{ github.actor }}' via '${{ github.event_name }}'." >> README.md
 
+          # Commit and push changes
           git add config/orchestrator_config.json README.md
           git commit -m "Disable orchestrator and log update on $TIMESTAMP"
           git push origin main
