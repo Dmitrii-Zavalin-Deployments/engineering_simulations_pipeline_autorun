@@ -113,7 +113,7 @@ jobs:
           # Fluid Dynamics Solver Trigger
           if [ -f "$INPUT_DIR/fluid_simulation_input.json" ] && \
             [ ! -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
-            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_fluid_dynamics_solver_sred" "fluid_simulation_pipeline.yml"
+            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_fluid_dynamics_solver_sred" "fluid_dynamics_calculations.yml"
           fi
 
 
