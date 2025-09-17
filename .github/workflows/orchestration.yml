@@ -74,17 +74,18 @@ jobs:
           echo "" >> README.md
           echo "✅ Your simulation run is complete. The orchestrator has been disabled to prevent blank or repeated runs." >> README.md
           echo "" >> README.md
-          echo "🛑 To fully disable GitHub Actions runner in this repository:" >> README.md
+          echo "🛑 To temporarily disable the orchestrator workflow:" >> README.md
           echo "1. Go to your GitHub repository." >> README.md
-          echo "2. Click **Settings** → **Actions** → **General**." >> README.md
-          echo "3. Under 'Actions permissions', select **Disable Actions for this repository**." >> README.md
+          echo "2. Click the **Actions** tab." >> README.md
+          echo "3. Select the **Orchestrator** workflow from the left sidebar." >> README.md
+          echo "4. Click the **Disable workflow** button near the top-right." >> README.md
           echo "" >> README.md
           echo "🔄 To start a new simulation run later:" >> README.md
           echo "1. Open `config/orchestrator_config.json` and change `"enabled": false` to `"enabled": true`." >> README.md
-          echo "2. Go back to **Settings** → **Actions** → **General**." >> README.md
-          echo "3. Re-enable GitHub Actions by selecting **Allow all actions and reusable workflows**." >> README.md
-          echo "4. Commit and push your changes to activate the orchestrator again." >> README.md
-          
+          echo "2. Commit and push your changes." >> README.md
+          echo "3. Go to the **Actions** tab → **Orchestrator** workflow." >> README.md
+          echo "4. Click **Enable workflow** to reactivate it." >> README.md
+
           # Commit and push changes
           git add config/orchestrator_config.json README.md
           git commit -m "Disable orchestrator and log update on $TIMESTAMP"
