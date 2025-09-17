@@ -43,6 +43,30 @@ jobs:
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
         run: src/download_from_dropbox.sh
 
+      - name: 🔒 Disable orchestrator and update README
+        if: steps.flag_check.outputs.enabled == 'true'
+        env:
+          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
+          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+        run: |
+          TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+          
+          # Update orchestrator_config.json
+          echo "{ \"enabled\": false }" > config/orchestrator_config.json
+
+          # Update README.md with timestamped log
+          echo "# engineering_simulations_pipeline_autorun" > README.md
+          echo "" >> README.md
+          echo "🕒 The orchestrator_config.json flag was updated from true to false on $TIMESTAMP by '${{ github.actor }}' via '${{ github.event_name }}'." >> README.md
+
+          # Configure Git and commit changes
+          git config --global user.name "${GIT_USER_NAME}"
+          git config --global user.email "${GIT_USER_EMAIL}"
+          git pull --rebase origin main || echo "⚠️ Pull failed or not needed"
+          git add config/orchestrator_config.json README.md
+          git commit -m "Disable orchestrator and log update on $TIMESTAMP"
+          git push origin main
+
       - name: Trigger Downstream Workflows via GitHub API
         if: steps.flag_check.outputs.enabled == 'true'
         env:
