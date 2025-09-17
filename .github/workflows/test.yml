@@ -14,7 +14,7 @@ jobs:
           curl -X POST \
             -H "Authorization: token ${{ secrets.GIT_PAT }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred/actions/workflows/triggered.yml/dispatches \
+            https://api.github.com/repos/Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred/actions/workflows/fluid_simulation_pipeline.yml/dispatches \
             -d '{"ref":"main"}'
 
 
