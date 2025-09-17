@@ -73,7 +73,7 @@ jobs:
 
           # Boundary Mapping Trigger
           if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
-            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred" "fluid_simulation_pipeline.yml"
+            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred" "boundary_conditions_workflow.yml"
           fi
 
           # Geometry Masking Trigger
