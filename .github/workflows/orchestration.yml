@@ -78,7 +78,7 @@ jobs:
 
           # Geometry Masking Trigger
           if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/geometry_masking_gmsh.json" ]; then
-            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred" "fluid_simulation_pipeline.yml"
+            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred" "geometry_masking_workflow.yml"
           fi
 
           # Input Builder Trigger
