@@ -114,27 +114,24 @@ jobs:
           if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/enriched_metadata.json" ]; then
             trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred" "fluid_simulation_pipeline.yml"
           else
-            echo "ℹ️ Skipped Domain Grid Trigger: 'enriched_metadata.json' already exists."
-            echo "📝 To regenerate it, delete in Dropbox 'engineering_simulations_pipeline/enriched_metadata.json' and rerun the orchestrator. See README.md in the domain grid repository for details."
+            echo "ℹ️ Skipped Domain Grid Trigger: 'enriched_metadata.json' already exists or required inputs missing."
           fi
 
           # Boundary Mapping Trigger
           if ls "$INPUT_DIR"/*.step &>/dev/null && \
-            [ -f "$INPUT_DIR/flow_data.json" ] && \
-            [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
-            [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
+             [ -f "$INPUT_DIR/flow_data.json" ] && \
+             [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
+             [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
             trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred" "boundary_conditions_workflow.yml"
           else
-            echo "ℹ️ Skipped Boundary Mapping Trigger: 'boundary_conditions_gmsh.json' already exists or 'enriched_metadata.json' is missing."
-            echo "📝 To regenerate it, delete in Dropbox 'engineering_simulations_pipeline/boundary_conditions_gmsh.json' and rerun the orchestrator. See README.md in the boundary mapping repository for details."
+            echo "ℹ️ Skipped Boundary Mapping Trigger: 'boundary_conditions_gmsh.json' already exists or prerequisites missing."
           fi
 
           # Geometry Masking Trigger
           if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/geometry_masking_gmsh.json" ]; then
             trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred" "geometry_masking_workflow.yml"
           else
-            echo "ℹ️ Skipped Geometry Masking Trigger: 'geometry_masking_gmsh.json' already exists."
-            echo "📝 To regenerate it, delete in Dropbox 'engineering_simulations_pipeline/geometry_masking_gmsh.json' and rerun the orchestrator. See README.md in the geometry masking repository for details."
+            echo "ℹ️ Skipped Geometry Masking Trigger: 'geometry_masking_gmsh.json' already exists or prerequisites missing."
           fi
 
           # Input Builder Trigger
@@ -144,8 +141,7 @@ jobs:
              [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
             trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_input_builder_sred" "fluid_simulation_pipeline.yml"
           else
-            echo "ℹ️ Skipped Input Builder Trigger: 'fluid_simulation_input.json' already exists."
-            echo "📝 To regenerate it, delete in Dropbox 'engineering_simulations_pipeline/fluid_simulation_input.json' and rerun the orchestrator. See README.md in the input builder repository for details."
+            echo "ℹ️ Skipped Input Builder Trigger: 'fluid_simulation_input.json' already exists or prerequisites missing."
           fi
 
           # Fluid Dynamics Solver Trigger
@@ -153,9 +149,92 @@ jobs:
              [ ! -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
             trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_fluid_dynamics_solver_sred" "fluid_dynamics_calculations.yml"
           else
-            echo "ℹ️ Skipped Fluid Dynamics Solver Trigger: 'navier_stokes_output.zip' already exists."
-            echo "📝 To regenerate it, delete in Dropbox 'engineering_simulations_pipeline/navier_stokes_output.zip' and rerun the orchestrator. See README.md in the fluid solver repository for details."
+            echo "ℹ️ Skipped Fluid Dynamics Solver Trigger: 'navier_stokes_output.zip' already exists or prerequisites missing."
           fi
+
+      - name: Archive Results + Trigger Integrity Investigation + Cleanup + Dropbox Sync
+        env:
+          GIT_PAT: ${{ secrets.GIT_PAT }}
+          APP_KEY: ${{ secrets.APP_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+        run: |
+          INPUT_DIR="data/testing-input-output"
+          ARCHIVE_DIR="$INPUT_DIR/navier_stokes_runs"
+          ARCHIVE_ZIP="$INPUT_DIR/navier_stokes_runs.zip"
+          TIMESTAMP=$(date "+%Y-%m-%d_%H-%M-%S")
+          RUN_FOLDER="$ARCHIVE_DIR/$TIMESTAMP"
+
+          # Restore previous archive if exists
+          if [ -f "$ARCHIVE_ZIP" ]; then
+            echo "📦 Restoring previous archive from $ARCHIVE_ZIP"
+            unzip -q "$ARCHIVE_ZIP" -d "$ARCHIVE_DIR"
+          else
+            echo "📁 No previous archive found. Creating $ARCHIVE_DIR"
+            mkdir -p "$ARCHIVE_DIR"
+          fi
+
+          # Trigger Integrity Investigation
+          if [ -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
+            echo "🚀 Triggering integrity investigation workflow..."
+            curl -X POST \
+              -H "Authorization: token $GIT_PAT" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_integrity_investigation/actions/workflows/integrity_check.yml/dispatches \
+              -d '{"ref":"main"}'
+          else
+            echo "🚫 Skipping integrity trigger: navier_stokes_output.zip not found."
+          fi
+
+          # Archive current solver output
+          if [ -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
+            echo "📦 Archiving results to $RUN_FOLDER"
+            mkdir -p "$RUN_FOLDER"
+            unzip -q "$INPUT_DIR/navier_stokes_output.zip" -d "$RUN_FOLDER"
+          else
+            echo "🚫 Skipping archive: navier_stokes_output.zip not found."
+          fi
+
+          # Cleanup logic
+          DELETE_FLAG="false"
+          if [ -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
+            DELETE_FLAG="true"
+          fi
+
+          if [ "$DELETE_FLAG" == "true" ]; then
+            echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip..."
+            find "$INPUT_DIR" -type f ! -name '*.step' ! -name 'flow_data.json' ! -name 'navier_stokes_output.zip' ! -name 'navier_stokes_runs.zip' -exec rm -v {} +
+            find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
+
+            echo "🧹 Cleaning Dropbox folder: preserving .step, flow_data.json, navier_stokes_runs.zip..."
+            python3 src/download_dropbox_files.py delete "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
+          else
+            echo "🚫 Skipping cleanup. DELETE_FLAG=false"
+          fi
+
+          # Remove old archive before creating new one
+          if [ -f "$ARCHIVE_ZIP" ]; then
+            echo "🗑️ Removing old archive: $ARCHIVE_ZIP"
+            rm -v "$ARCHIVE_ZIP"
+          else
+            echo "📁 No previous archive to remove."
+          fi
+
+          # Zip updated archive
+          echo "📦 Zipping updated archive to $ARCHIVE_ZIP"
+          cd "$INPUT_DIR"
+          zip -r -q "navier_stokes_runs.zip" "navier_stokes_runs"
+          cd -
+
+      - name: Upload Fluid Simulation Archive to Dropbox
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+        run: src/upload_to_dropbox.sh
+
+
+
 
 
 
