@@ -65,7 +65,7 @@ jobs:
           TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
           # Update orchestrator_config.json
-          echo '{ "enabled": false }' > config/orchestrator_config.json
+          # echo '{ "enabled": false }' > config/orchestrator_config.json
 
           # Update README.md with timestamped log
           echo "# engineering_simulations_pipeline_autorun" > README.md
