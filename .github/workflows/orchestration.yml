@@ -92,7 +92,6 @@ jobs:
           git push origin main
 
       - name: Trigger Downstream Workflows via GitHub API
-        if: steps.flag_check.outputs.enabled == 'true'
         env:
           GIT_PAT: ${{ secrets.GIT_PAT }}
         run: |
@@ -120,10 +119,13 @@ jobs:
           fi
 
           # Boundary Mapping Trigger
-          if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
+          if ls "$INPUT_DIR"/*.step &>/dev/null && \
+            [ -f "$INPUT_DIR/flow_data.json" ] && \
+            [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
+            [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
             trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred" "boundary_conditions_workflow.yml"
           else
-            echo "ℹ️ Skipped Boundary Mapping Trigger: 'boundary_conditions_gmsh.json' already exists."
+            echo "ℹ️ Skipped Boundary Mapping Trigger: 'boundary_conditions_gmsh.json' already exists or 'enriched_metadata.json' is missing."
             echo "📝 To regenerate it, delete in Dropbox 'engineering_simulations_pipeline/boundary_conditions_gmsh.json' and rerun the orchestrator. See README.md in the boundary mapping repository for details."
           fi
 
@@ -137,9 +139,9 @@ jobs:
 
           # Input Builder Trigger
           if [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
-            [ -f "$INPUT_DIR/boundary_conditions_gmsh.json" ] && \
-            [ -f "$INPUT_DIR/geometry_masking_gmsh.json" ] && \
-            [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
+             [ -f "$INPUT_DIR/boundary_conditions_gmsh.json" ] && \
+             [ -f "$INPUT_DIR/geometry_masking_gmsh.json" ] && \
+             [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
             trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_input_builder_sred" "fluid_simulation_pipeline.yml"
           else
             echo "ℹ️ Skipped Input Builder Trigger: 'fluid_simulation_input.json' already exists."
@@ -148,7 +150,7 @@ jobs:
 
           # Fluid Dynamics Solver Trigger
           if [ -f "$INPUT_DIR/fluid_simulation_input.json" ] && \
-            [ ! -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
+             [ ! -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
             trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_fluid_dynamics_solver_sred" "fluid_dynamics_calculations.yml"
           else
             echo "ℹ️ Skipped Fluid Dynamics Solver Trigger: 'navier_stokes_output.zip' already exists."
