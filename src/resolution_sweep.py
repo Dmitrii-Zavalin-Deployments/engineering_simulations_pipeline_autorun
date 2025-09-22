@@ -2,12 +2,15 @@ import json
 import sys
 import os
 
+# 🔧 Configuration
 INPUT_DIR = "data/testing-input-output"
 METADATA_FILE = os.path.join(INPUT_DIR, "enriched_metadata.json")
 FLOW_DATA_FILE = os.path.join(INPUT_DIR, "flow_data.json")
 ADVICE_FILE = os.path.join(INPUT_DIR, "geometry_resolution_advice.json")
+MAX_VOXELS = 10_000_000
+NUM_STEPS = 10
 
-def compute_resolution_sweep(json_path, max_voxels=10_000_000, num_steps=10):
+def compute_resolution_sweep(json_path):
     print(f"🔍 Reading enriched metadata from: {json_path}")
     if not os.path.isfile(json_path):
         raise FileNotFoundError(f"❌ File not found: {json_path}")
@@ -41,18 +44,18 @@ def compute_resolution_sweep(json_path, max_voxels=10_000_000, num_steps=10):
     print(f"  min_dim = {min_dim:.5f}")
 
     # Calculate safe resolution
-    safe_resolution_mm = dim_x / (max_voxels ** (1/3))
+    safe_resolution_mm = dim_x / (MAX_VOXELS ** (1/3))
     print(f"🧠 Safe resolution estimate: {safe_resolution_mm:.5f} mm")
 
     # Generate 9 intermediate values between safe_resolution_mm and min_dim
-    step = (min_dim - safe_resolution_mm) / num_steps
-    sweep_values = [round(safe_resolution_mm + i * step, 5) for i in range(1, num_steps)]
+    step = (min_dim - safe_resolution_mm) / NUM_STEPS
+    sweep_values = [round(safe_resolution_mm + i * step, 5) for i in range(1, NUM_STEPS)]
 
     print(f"📊 Resolution sweep array:")
     for i, val in enumerate(sweep_values):
         print(f"  [{i}] {val} mm")
 
-    return sweep_values, safe_resolution_mm, min_dim
+    return sweep_values, round(safe_resolution_mm, 5), round(min_dim, 5)
 
 def write_advice_file(current_resolution, sweep_array):
     payload = {
@@ -87,6 +90,9 @@ if __name__ == "__main__":
 
         current_resolution = sweep_array[0]  # First sweep value
         output_interval_value = sweep_array[1]  # Second sweep value
+
+        print(f"🧾 Selected current_resolution_run: {current_resolution}")
+        print(f"🧾 Selected output_interval update: {output_interval_value}")
 
         write_advice_file(current_resolution, sweep_array)
         update_flow_data(output_interval_value)
