@@ -33,7 +33,9 @@ jobs:
 
       - name: Make Dropbox Script Executable
         if: steps.flag_check.outputs.enabled == 'true'
-        run: chmod +x src/download_from_dropbox.sh
+        run: |
+          chmod +x src/download_from_dropbox.sh
+          chmod +x src/upload_to_dropbox.sh
 
       - name: Download Files from Dropbox
         if: steps.flag_check.outputs.enabled == 'true'
