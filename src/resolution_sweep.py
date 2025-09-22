@@ -100,9 +100,7 @@ def update_flow_data(current_resolution):
     with open(ADVICE_FILE, "r") as f:
         advice = json.load(f)
     sweep_array = advice["resolution_runs_array"]
-    output_interval_value = sweep_array[1]
 
-    flow_data["simulation_parameters"]["output_interval"] = output_interval_value
     flow_data["model_properties"]["default_resolution"] = current_resolution
 
     with open(FLOW_DATA_FILE, "w") as f:
