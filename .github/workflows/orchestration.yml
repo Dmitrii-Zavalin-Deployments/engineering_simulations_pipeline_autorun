@@ -175,70 +175,59 @@ jobs:
           TIMESTAMP=$(date "+%Y-%m-%d_%H-%M-%S")
           RUN_FOLDER="$ARCHIVE_DIR/$TIMESTAMP"
 
-          # Restore previous archive if exists
-          if [ -f "$ARCHIVE_ZIP" ]; then
-            echo "📦 Restoring previous archive from $ARCHIVE_ZIP"
-            unzip -q "$ARCHIVE_ZIP" -d "$ARCHIVE_DIR"
-          else
-            echo "📁 No previous archive found. Creating $ARCHIVE_DIR"
-            mkdir -p "$ARCHIVE_DIR"
-          fi
-
-          # Trigger Integrity Investigation
           if [ -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
+            echo "✅ Detected navier_stokes_output.zip — proceeding with archival and cleanup..."
+
+            # Restore previous archive if exists
+            if [ -f "$ARCHIVE_ZIP" ]; then
+              echo "📦 Restoring previous archive from $ARCHIVE_ZIP"
+              unzip -q "$ARCHIVE_ZIP" -d "$ARCHIVE_DIR"
+            else
+              echo "📁 No previous archive found. Creating $ARCHIVE_DIR"
+              mkdir -p "$ARCHIVE_DIR"
+            fi
+
+            # Trigger Integrity Investigation
             echo "🚀 Triggering integrity investigation workflow..."
             curl -X POST \
               -H "Authorization: token $GIT_PAT" \
               -H "Accept: application/vnd.github.v3+json" \
               https://api.github.com/repos/Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_integrity_investigation/actions/workflows/integrity_check.yml/dispatches \
               -d '{"ref":"main"}'
-          else
-            echo "🚫 Skipping integrity trigger: navier_stokes_output.zip not found."
-          fi
 
-          # Archive current solver output
-          if [ -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
+            # Archive current solver output
             echo "📦 Archiving results to $RUN_FOLDER"
             mkdir -p "$RUN_FOLDER"
             unzip -q "$INPUT_DIR/navier_stokes_output.zip" -d "$RUN_FOLDER"
-          else
-            echo "🚫 Skipping archive: navier_stokes_output.zip not found."
-          fi
 
-          # Cleanup logic
-          DELETE_FLAG="false"
-          if [ -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
-            DELETE_FLAG="true"
-          fi
-
-          if [ "$DELETE_FLAG" == "true" ]; then
+            # Cleanup logic
             echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip..."
             find "$INPUT_DIR" -type f ! -name '*.step' ! -name 'flow_data.json' ! -name 'navier_stokes_output.zip' ! -name 'navier_stokes_runs.zip' -exec rm -v {} +
             find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
 
             echo "🧹 Cleaning Dropbox folder: preserving .step, flow_data.json, navier_stokes_runs.zip..."
             python3 src/download_dropbox_files.py delete "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
-          
+
             echo "🔁 Advancing resolution sweep..."
             python3 src/advance_resolution_run.py
 
-          else
-            echo "🚫 Skipping cleanup. DELETE_FLAG=false"
-          fi
+            # Remove old archive before creating new one
+            if [ -f "$ARCHIVE_ZIP" ]; then
+              echo "🗑️ Removing old archive: $ARCHIVE_ZIP"
+              rm -v "$ARCHIVE_ZIP"
+            else
+              echo "📁 No previous archive to remove."
+            fi
 
-          # Remove old archive before creating new one
-          if [ -f "$ARCHIVE_ZIP" ]; then
-            echo "🗑️ Removing old archive: $ARCHIVE_ZIP"
-            rm -v "$ARCHIVE_ZIP"
-          else
-            echo "📁 No previous archive to remove."
-          fi
+            # Zip updated archive
+            echo "📦 Zipping updated archive to $ARCHIVE_ZIP"
+            cd "$INPUT_DIR"
+            zip -r -q "navier_stokes_runs.zip" "navier_stokes_runs"
+            cd -
 
-          # Zip updated archive
-          echo "📦 Zipping updated archive to $ARCHIVE_ZIP"
-          cd "$INPUT_DIR"
-          zip -r -q "navier_stokes_runs.zip" "navier_stokes_runs"
-          cd -
+          else
+            echo "🚫 Skipping archival and cleanup: navier_stokes_output.zip not found."
+          fi
 
       - name: Upload Fluid Simulation Archive to Dropbox
         env:
