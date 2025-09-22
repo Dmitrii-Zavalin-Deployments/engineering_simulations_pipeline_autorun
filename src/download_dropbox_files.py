@@ -109,7 +109,7 @@ if __name__ == "__main__":
         log_file_path = sys.argv[6]
         delete_files_except_step_and_flow(dropbox_folder, refresh_token, client_id, client_secret, log_file_path)
 
-    if mode == "cleanup":
+    elif mode == "cleanup":
         dropbox_folder = sys.argv[2]
         refresh_token = sys.argv[3]
         client_id = sys.argv[4]

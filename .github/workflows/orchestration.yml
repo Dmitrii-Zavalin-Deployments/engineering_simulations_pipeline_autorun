@@ -142,7 +142,7 @@ jobs:
             find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
 
             echo "🧹 Cleaning Dropbox folder: deleting all files except .step and flow_data.json and geometry_resolution_advice.json..."
-            python3 src/download_dropbox_files.py delete "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
+            python3 src/download_dropbox_files.py cleanup "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
 
           else
             echo "🚫 Skipping resolution_sweep.py: enriched_metadata.json not found."
