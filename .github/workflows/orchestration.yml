@@ -97,6 +97,9 @@ jobs:
       - name: Trigger Downstream Workflows via GitHub API
         env:
           GIT_PAT: ${{ secrets.GIT_PAT }}
+          APP_KEY: ${{ secrets.APP_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
         run: |
           INPUT_DIR="data/testing-input-output"
           TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
