@@ -29,7 +29,7 @@ def delete_file_from_dropbox(dbx, file_path, log_file):
         log_file.write(f"Failed to delete file: {file_path}, error: {e}\n")
         print(f"❌ Failed to delete {file_path}: {e}")
 
-# Function to delete all files except .step and flow_data.json
+# Function to delete all files except .step and flow_data.json, and geometry_resolution_advice.json, and navier_stokes_runs.zip
 def delete_files_except_step_and_flow(dropbox_folder, refresh_token, client_id, client_secret, log_file_path):
     access_token = refresh_access_token(refresh_token, client_id, client_secret)
     dbx = dropbox.Dropbox(access_token)
@@ -41,7 +41,26 @@ def delete_files_except_step_and_flow(dropbox_folder, refresh_token, client_id, 
             for entry in result.entries:
                 if isinstance(entry, dropbox.files.FileMetadata):
                     name = entry.name
-                    if not (name.endswith(".step") or name == "flow_data.json" or name == "geometry_resolution_advice.json"):
+                    if not (name.endswith(".step") or name == "flow_data.json" or name == "geometry_resolution_advice.json" or name == "navier_stokes_runs.zip"):
+                        delete_file_from_dropbox(dbx, entry.path_lower, log_file)
+            log_file.write("Selective deletion completed.\n")
+        except Exception as e:
+            log_file.write(f"Error during deletion: {e}\n")
+            print(f"❌ Error during deletion: {e}")
+
+# Final cleanup
+def final_cleanup_function(dropbox_folder, refresh_token, client_id, client_secret, log_file_path):
+    access_token = refresh_access_token(refresh_token, client_id, client_secret)
+    dbx = dropbox.Dropbox(access_token)
+
+    with open(log_file_path, "a") as log_file:
+        log_file.write("Starting selective deletion...\n")
+        try:
+            result = dbx.files_list_folder(dropbox_folder)
+            for entry in result.entries:
+                if isinstance(entry, dropbox.files.FileMetadata):
+                    name = entry.name
+                    if not (name.endswith(".step") or name == "flow_data.json" or name == "navier_stokes_runs.zip"):
                         delete_file_from_dropbox(dbx, entry.path_lower, log_file)
             log_file.write("Selective deletion completed.\n")
         except Exception as e:
@@ -90,6 +109,14 @@ if __name__ == "__main__":
         log_file_path = sys.argv[6]
         delete_files_except_step_and_flow(dropbox_folder, refresh_token, client_id, client_secret, log_file_path)
 
+    if mode == "cleanup":
+        dropbox_folder = sys.argv[2]
+        refresh_token = sys.argv[3]
+        client_id = sys.argv[4]
+        client_secret = sys.argv[5]
+        log_file_path = sys.argv[6]
+        final_cleanup_function(dropbox_folder, refresh_token, client_id, client_secret, log_file_path)
+
     elif mode == "download":
         dropbox_folder = sys.argv[2]
         local_folder = sys.argv[3]
@@ -100,7 +127,7 @@ if __name__ == "__main__":
         download_files_from_dropbox(dropbox_folder, local_folder, refresh_token, client_id, client_secret, log_file_path)
 
     else:
-        print("❌ Invalid mode. Use 'delete' or 'download'.")
+        print("❌ Invalid mode. Use 'delete', 'download' or 'cleanup'.")
         sys.exit(1)
 
 

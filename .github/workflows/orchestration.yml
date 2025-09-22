@@ -36,6 +36,7 @@ jobs:
         run: |
           chmod +x src/download_from_dropbox.sh
           chmod +x src/upload_to_dropbox.sh
+          chmod +x src/final_cleanup_script.sh
 
       - name: Download Files from Dropbox
         if: steps.flag_check.outputs.enabled == 'true'
@@ -120,9 +121,26 @@ jobs:
           fi
 
           # Run resolution sweep script only if enriched_metadata.json exists
-          if [ -f "$INPUT_DIR/enriched_metadata.json" ]; then
+          if [ -f "$INPUT_DIR/enriched_metadata.json" ] && [ ! -f "$INPUT_DIR/geometry_resolution_advice.json" ]; then
             echo "📊 Running resolution_sweep.py to compute and inject resolution advice..."
             python3 src/resolution_sweep.py
+
+            echo "📊 Deleting the preliminary iteration files to run the final iteration..."
+            
+            # Cleanup logic
+            echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip, geometry_resolution_advice.json..."
+            find "$INPUT_DIR" -type f ! -name '*.step' \
+                              ! -name 'flow_data.json' \
+                              ! -name 'navier_stokes_output.zip' \
+                              ! -name 'navier_stokes_runs.zip' \
+                              ! -name 'geometry_resolution_advice.json' \
+                              -exec rm -v {} +
+
+            find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
+
+            echo "🧹 Cleaning Dropbox folder: deleting all files except .step and flow_data.json and geometry_resolution_advice.json..."
+            python3 src/download_dropbox_files.py delete "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
+
           else
             echo "🚫 Skipping resolution_sweep.py: enriched_metadata.json not found."
           fi
@@ -242,6 +260,13 @@ jobs:
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
         run: src/upload_to_dropbox.sh
 
+      - name: Final cleanup script
+        if: steps.flag_check.outputs.enabled == 'false'
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+        run: src/final_cleanup_script.sh
 
 
 
