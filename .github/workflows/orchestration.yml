@@ -214,6 +214,10 @@ jobs:
 
             echo "🧹 Cleaning Dropbox folder: preserving .step, flow_data.json, navier_stokes_runs.zip..."
             python3 src/download_dropbox_files.py delete "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
+          
+            echo "🔁 Advancing resolution sweep..."
+            python3 src/advance_resolution_run.py
+
           else
             echo "🚫 Skipping cleanup. DELETE_FLAG=false"
           fi
