@@ -18,15 +18,24 @@ def refresh_access_token(refresh_token, client_id, client_secret):
     else:
         raise Exception("Failed to refresh access token")
 
-# Function to delete a file from Dropbox
-def delete_file_from_dropbox(dbx, file_path, log_file):
-    try:
-        dbx.files_delete_v2(file_path)
-        log_file.write(f"Deleted file from Dropbox: {file_path}\n")
-        print(f"Deleted file from Dropbox: {file_path}")  # Print to GitHub Actions logs
-    except Exception as e:
-        log_file.write(f"Failed to delete file: {file_path}, error: {e}\n")
-        print(f"Failed to delete file: {file_path}, error: {e}")  # Print error to GitHub Actions logs
+# Function to delete all files except .step and flow_data.json
+def delete_files_except_step_and_flow(dropbox_folder, refresh_token, client_id, client_secret, log_file_path):
+    access_token = refresh_access_token(refresh_token, client_id, client_secret)
+    dbx = dropbox.Dropbox(access_token)
+
+    with open(log_file_path, "a") as log_file:
+        log_file.write("Starting selective deletion...\n")
+        try:
+            result = dbx.files_list_folder(dropbox_folder)
+            for entry in result.entries:
+                if isinstance(entry, dropbox.files.FileMetadata):
+                    name = entry.name
+                    if not (name.endswith(".step") or name == "flow_data.json" or name == "geometry_resolution_advice.json"):
+                        delete_file_from_dropbox(dbx, entry.path_lower, log_file)
+            log_file.write("Selective deletion completed.\n")
+        except Exception as e:
+            log_file.write(f"Error during deletion: {e}\n")
+            print(f"❌ Error during deletion: {e}")
 
 # Function to download all files from a specified Dropbox folder and delete them afterwards
 def download_files_from_dropbox(dropbox_folder, local_folder, refresh_token, client_id, client_secret, log_file_path):
