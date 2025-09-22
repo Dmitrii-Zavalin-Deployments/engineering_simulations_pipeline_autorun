@@ -212,7 +212,7 @@ jobs:
             find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
 
             echo "🧹 Cleaning Dropbox folder: preserving .step, flow_data.json, navier_stokes_runs.zip..."
-            python3 src/download_dropbox_files.py delete "engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
+            python3 src/download_dropbox_files.py "engineering_simulations_pipeline" delete "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
 
             echo "🔁 Advancing resolution sweep..."
             python3 src/advance_resolution_run.py
