@@ -66,8 +66,25 @@ def write_advice_file(current_resolution, sweep_array):
         json.dump(payload, f, indent=2)
     print(f"✅ Resolution advice written to: {ADVICE_FILE}")
 
-def update_flow_data(output_interval_value):
-    print(f"🔧 Updating flow_data.json with output_interval = {output_interval_value}")
+def read_advice_file():
+    print(f"📖 Reading resolution advice from: {ADVICE_FILE}")
+    with open(ADVICE_FILE, "r") as f:
+        data = json.load(f)
+
+    current_resolution = data["current_resolution_run"]
+    sweep_array = data["resolution_runs_array"]
+
+    print(f"🧾 Loaded current_resolution_run: {current_resolution}")
+    print(f"📊 Loaded resolution_runs_array:")
+    for i, val in enumerate(sweep_array):
+        print(f"  [{i}] {val} mm")
+
+    return sweep_array, current_resolution
+
+def update_flow_data(current_resolution):
+    print(f"🔧 Updating flow_data.json with:")
+    print(f"    default_resolution = {current_resolution}")
+
     if not os.path.isfile(FLOW_DATA_FILE):
         raise FileNotFoundError(f"❌ flow_data.json not found at: {FLOW_DATA_FILE}")
 
@@ -76,8 +93,17 @@ def update_flow_data(output_interval_value):
 
     if "simulation_parameters" not in flow_data:
         raise KeyError("❌ 'simulation_parameters' block missing in flow_data.json")
+    if "model_properties" not in flow_data:
+        raise KeyError("❌ 'model_properties' block missing in flow_data.json")
+
+    # Read resolution_runs_array again to get output_interval
+    with open(ADVICE_FILE, "r") as f:
+        advice = json.load(f)
+    sweep_array = advice["resolution_runs_array"]
+    output_interval_value = sweep_array[1]
 
     flow_data["simulation_parameters"]["output_interval"] = output_interval_value
+    flow_data["model_properties"]["default_resolution"] = current_resolution
 
     with open(FLOW_DATA_FILE, "w") as f:
         json.dump(flow_data, f, indent=2)
@@ -86,16 +112,13 @@ def update_flow_data(output_interval_value):
 
 if __name__ == "__main__":
     try:
-        sweep_array, safe_resolution_mm, min_dim = compute_resolution_sweep(METADATA_FILE)
+        if not os.path.isfile(ADVICE_FILE):
+            sweep_array, safe_resolution_mm, min_dim = compute_resolution_sweep(METADATA_FILE)
+            current_resolution = sweep_array[0]
+            write_advice_file(current_resolution, sweep_array)
 
-        current_resolution = sweep_array[0]  # First sweep value
-        output_interval_value = sweep_array[1]  # Second sweep value
-
-        print(f"🧾 Selected current_resolution_run: {current_resolution}")
-        print(f"🧾 Selected output_interval update: {output_interval_value}")
-
-        write_advice_file(current_resolution, sweep_array)
-        update_flow_data(output_interval_value)
+        sweep_array, current_resolution = read_advice_file()
+        update_flow_data(current_resolution)
 
         print("🎯 Script completed successfully.")
 
