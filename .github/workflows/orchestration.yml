@@ -119,9 +119,13 @@ jobs:
             echo "ℹ️ Skipped Domain Grid Trigger: 'enriched_metadata.json' already exists or required inputs missing."
           fi
 
-          # Run resolution sweep script
-          echo "📊 Running resolution_sweep.py to compute and inject resolution advice..."
-          python3 src/resolution_sweep.py
+          # Run resolution sweep script only if enriched_metadata.json exists
+          if [ -f "$INPUT_DIR/enriched_metadata.json" ]; then
+            echo "📊 Running resolution_sweep.py to compute and inject resolution advice..."
+            python3 src/resolution_sweep.py
+          else
+            echo "🚫 Skipping resolution_sweep.py: enriched_metadata.json not found."
+          fi
 
           # Boundary Mapping Trigger
           if ls "$INPUT_DIR"/*.step &>/dev/null && \
