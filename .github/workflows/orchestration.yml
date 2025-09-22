@@ -201,12 +201,18 @@ jobs:
             unzip -q "$INPUT_DIR/navier_stokes_output.zip" -d "$RUN_FOLDER"
 
             # Cleanup logic
-            echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip..."
-            find "$INPUT_DIR" -type f ! -name '*.step' ! -name 'flow_data.json' ! -name 'navier_stokes_output.zip' ! -name 'navier_stokes_runs.zip' -exec rm -v {} +
+            echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip, geometry_resolution_advice.json..."
+            find "$INPUT_DIR" -type f ! -name '*.step' \
+                              ! -name 'flow_data.json' \
+                              ! -name 'navier_stokes_output.zip' \
+                              ! -name 'navier_stokes_runs.zip' \
+                              ! -name 'geometry_resolution_advice.json' \
+                              -exec rm -v {} +
+
             find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
 
             echo "🧹 Cleaning Dropbox folder: preserving .step, flow_data.json, navier_stokes_runs.zip..."
-            python3 src/download_dropbox_files.py delete "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
+            python3 src/download_dropbox_files.py delete "engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
 
             echo "🔁 Advancing resolution sweep..."
             python3 src/advance_resolution_run.py
