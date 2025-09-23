@@ -127,6 +127,7 @@ jobs:
           if ls "$INPUT_DIR"/*.step &>/dev/null && \
              [ -f "$INPUT_DIR/flow_data.json" ] && \
              [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
+             [ -f "$INPUT_DIR/geometry_resolution_advice.json" ] && \
              [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
             trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred" "boundary_conditions_workflow.yml"
           else
@@ -134,7 +135,7 @@ jobs:
           fi
 
           # Geometry Masking Trigger
-          if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/geometry_masking_gmsh.json" ]; then
+          if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ -f "$INPUT_DIR/geometry_resolution_advice.json" ] && [ ! -f "$INPUT_DIR/geometry_masking_gmsh.json" ]; then
             trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred" "geometry_masking_workflow.yml"
           else
             echo "ℹ️ Skipped Geometry Masking Trigger: 'geometry_masking_gmsh.json' already exists or prerequisites missing."
