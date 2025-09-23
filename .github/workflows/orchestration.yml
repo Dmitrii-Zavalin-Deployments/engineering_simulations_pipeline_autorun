@@ -123,65 +123,65 @@ jobs:
             echo "ℹ️ Skipped Domain Grid Trigger: 'enriched_metadata.json' already exists or required inputs missing."
           fi
 
-          # Boundary Mapping Trigger
-          if ls "$INPUT_DIR"/*.step &>/dev/null && \
-             [ -f "$INPUT_DIR/flow_data.json" ] && \
-             [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
-             [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
-            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred" "boundary_conditions_workflow.yml"
-          else
-            echo "ℹ️ Skipped Boundary Mapping Trigger: 'boundary_conditions_gmsh.json' already exists or prerequisites missing."
-          fi
+          # # Boundary Mapping Trigger
+          # if ls "$INPUT_DIR"/*.step &>/dev/null && \
+          #    [ -f "$INPUT_DIR/flow_data.json" ] && \
+          #    [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
+          #    [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
+          #   trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred" "boundary_conditions_workflow.yml"
+          # else
+          #   echo "ℹ️ Skipped Boundary Mapping Trigger: 'boundary_conditions_gmsh.json' already exists or prerequisites missing."
+          # fi
 
-          # Geometry Masking Trigger
-          if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/geometry_masking_gmsh.json" ]; then
-            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred" "geometry_masking_workflow.yml"
-          else
-            echo "ℹ️ Skipped Geometry Masking Trigger: 'geometry_masking_gmsh.json' already exists or prerequisites missing."
-          fi
+          # # Geometry Masking Trigger
+          # if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/geometry_masking_gmsh.json" ]; then
+          #   trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred" "geometry_masking_workflow.yml"
+          # else
+          #   echo "ℹ️ Skipped Geometry Masking Trigger: 'geometry_masking_gmsh.json' already exists or prerequisites missing."
+          # fi
 
-          # Run resolution sweep script only if enriched_metadata.json exists
-          if [ -f "$INPUT_DIR/enriched_metadata.json" ] && [ ! -f "$INPUT_DIR/geometry_resolution_advice.json" ]; then
-            echo "📊 Running resolution_sweep.py to compute and inject resolution advice..."
-            python3 src/resolution_sweep.py
+          # # Run resolution sweep script only if enriched_metadata.json exists
+          # if [ -f "$INPUT_DIR/enriched_metadata.json" ] && [ ! -f "$INPUT_DIR/geometry_resolution_advice.json" ]; then
+          #   echo "📊 Running resolution_sweep.py to compute and inject resolution advice..."
+          #   python3 src/resolution_sweep.py
 
-            echo "📊 Deleting the preliminary iteration files to run the final iteration..."
+          #   echo "📊 Deleting the preliminary iteration files to run the final iteration..."
             
-            # Cleanup logic
-            echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip, geometry_resolution_advice.json..."
-            find "$INPUT_DIR" -type f ! -name '*.step' \
-                              ! -name 'flow_data.json' \
-                              ! -name 'navier_stokes_output.zip' \
-                              ! -name 'navier_stokes_runs.zip' \
-                              ! -name 'geometry_resolution_advice.json' \
-                              -exec rm -v {} +
+          #   # Cleanup logic
+          #   echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip, geometry_resolution_advice.json..."
+          #   find "$INPUT_DIR" -type f ! -name '*.step' \
+          #                     ! -name 'flow_data.json' \
+          #                     ! -name 'navier_stokes_output.zip' \
+          #                     ! -name 'navier_stokes_runs.zip' \
+          #                     ! -name 'geometry_resolution_advice.json' \
+          #                     -exec rm -v {} +
 
-            find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
+          #   find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
 
-            echo "🧹 Cleaning Dropbox folder: deleting all files except .step and flow_data.json and geometry_resolution_advice.json..."
-            python3 src/download_dropbox_files.py cleanup "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
+          #   echo "🧹 Cleaning Dropbox folder: deleting all files except .step and flow_data.json and geometry_resolution_advice.json..."
+          #   python3 src/download_dropbox_files.py cleanup "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
 
-          else
-            echo "🚫 Skipping resolution_sweep.py: enriched_metadata.json not found."
-          fi
+          # else
+          #   echo "🚫 Skipping resolution_sweep.py: enriched_metadata.json not found."
+          # fi
 
-          # Input Builder Trigger
-          if [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
-             [ -f "$INPUT_DIR/boundary_conditions_gmsh.json" ] && \
-             [ -f "$INPUT_DIR/geometry_masking_gmsh.json" ] && \
-             [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
-            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_input_builder_sred" "fluid_simulation_pipeline.yml"
-          else
-            echo "ℹ️ Skipped Input Builder Trigger: 'fluid_simulation_input.json' already exists or prerequisites missing."
-          fi
+          # # Input Builder Trigger
+          # if [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
+          #    [ -f "$INPUT_DIR/boundary_conditions_gmsh.json" ] && \
+          #    [ -f "$INPUT_DIR/geometry_masking_gmsh.json" ] && \
+          #    [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
+          #   trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_input_builder_sred" "fluid_simulation_pipeline.yml"
+          # else
+          #   echo "ℹ️ Skipped Input Builder Trigger: 'fluid_simulation_input.json' already exists or prerequisites missing."
+          # fi
 
-          # Fluid Dynamics Solver Trigger
-          if [ -f "$INPUT_DIR/fluid_simulation_input.json" ] && \
-             [ ! -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
-            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_fluid_dynamics_solver_sred" "fluid_dynamics_calculations.yml"
-          else
-            echo "ℹ️ Skipped Fluid Dynamics Solver Trigger: 'navier_stokes_output.zip' already exists or prerequisites missing."
-          fi
+          # # Fluid Dynamics Solver Trigger
+          # if [ -f "$INPUT_DIR/fluid_simulation_input.json" ] && \
+          #    [ ! -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
+          #   trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_fluid_dynamics_solver_sred" "fluid_dynamics_calculations.yml"
+          # else
+          #   echo "ℹ️ Skipped Fluid Dynamics Solver Trigger: 'navier_stokes_output.zip' already exists or prerequisites missing."
+          # fi
 
       - name: Archive Results + Trigger Integrity Investigation + Cleanup + Dropbox Sync
         env:
