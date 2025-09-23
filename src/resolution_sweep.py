@@ -7,7 +7,7 @@ INPUT_DIR = "data/testing-input-output"
 METADATA_FILE = os.path.join(INPUT_DIR, "enriched_metadata.json")
 FLOW_DATA_FILE = os.path.join(INPUT_DIR, "flow_data.json")
 ADVICE_FILE = os.path.join(INPUT_DIR, "geometry_resolution_advice.json")
-MAX_VOXELS = 10_000_000
+MAX_VOXELS = 100 # for testing reduced 10_000_000 to 100
 NUM_STEPS = 10
 
 def compute_resolution_sweep(json_path):
