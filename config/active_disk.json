@@ -1,0 +1,5 @@
+{
+    "project_id": "navier_stokes_alpha_01",
+    "manifest_url": "https://raw.githubusercontent.com/zavalind/manifests/main/fluid_dynamics.json",
+    "description": "Active simulation for coastal thermal analysis."
+}
