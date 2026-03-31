@@ -1,279 +1,243 @@
-name: Orchestrator
+name: Navier–Stokes Solver
 
 on:
-  schedule:
-    - cron: "0 * * * *"  # Runs every hour at minute 0
-  workflow_dispatch:  # Allows manual trigger
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
 
 jobs:
-  orchestrate-simulation:
+  pre_flight_tests:
+    name: "🧪 Pre-Flight: Logic & Hygiene"
     runs-on: ubuntu-latest
-
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # Define the 'Gold Standard' test command here (e.g. # pytest -s tests/ -vv --cov=src --cov-report=term-missing)
+      TEST_COMMAND: "pytest -s tests/ -vv --cov=src --cov-report=term-missing"
+    
     steps:
-      - name: Checkout Repository
+      - name: 🗂️ Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Python
+      - name: 🐍 Setup Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.11"
 
-      # - name: Check Orchestration Flag from Config
-      #   id: flag_check
-      #   run: |
-      #     ENABLED=$(jq -r '.enabled' config/orchestrator_config.json)
-      #     echo "enabled=$ENABLED" >> $GITHUB_OUTPUT
-      #   shell: bash
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      # - name: Install Dependencies
-      #   if: steps.flag_check.outputs.enabled == 'true'
-      #   run: |
-      #     python -m pip install --upgrade pip
-      #     pip install -r requirements.txt
+      - name: 🧹 Auto-Clean (Autoflake)
+        run: |
+          autoflake --in-place --recursive --remove-unused-variables --remove-all-unused-imports src tests
 
-      # - name: Make Dropbox Script Executable
-      #   if: steps.flag_check.outputs.enabled == 'true'
-      #   run: |
-      #     chmod +x src/download_from_dropbox.sh
-      #     chmod +x src/upload_to_dropbox.sh
-      #     chmod +x src/final_cleanup_script.sh
+      - name: 🧹 Static Analysis & Lint (Ruff)
+        run: |
+          ruff check src tests --fix
 
-      # - name: Download Files from Dropbox
-      #   if: steps.flag_check.outputs.enabled == 'true'
-      #   env:
-      #     APP_KEY: ${{ secrets.APP_KEY }}
-      #     APP_SECRET: ${{ secrets.APP_SECRET }}
-      #     REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-      #   run: src/download_from_dropbox.sh
+      - name: 🚀 Commit & Push Auto-Clean Changes
+        if: always()
+        env:
+          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
+          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+        run: |
+          git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
+          git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
+          git add .
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "🧹 Auto-clean: structural hygiene"
+            git push || echo "Push skipped: branch protected."
+          fi
 
-      # - name: 🔒 Disable orchestrator and update README
-      #   if: steps.flag_check.outputs.enabled == 'true'
-      #   env:
-      #     GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
-      #     GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
-      #   run: |
-      #     # Configure Git
-      #     git config --global user.name "${GIT_USER_NAME}"
-      #     git config --global user.email "${GIT_USER_EMAIL}"
+      - name: 💀 Dead Code Audit (Vulture)
+        run: |
+          # Vulture exits with non-zero if dead code is found, triggering failure()
+          vulture src --min-confidence 70
 
-      #     # Stash any local changes to avoid rebase conflict
-      #     git stash --include-untracked || echo "⚠️ Nothing to stash"
+      - name: 🧪 Quality Gate Check
+        if: failure()
+        run: |
+          echo "CRITICAL: Dead code detected in src/. Review the Vulture logs above."
+          echo "Rule 2 (Zero-Debt Mandate) violation: Delete unused code before merging."
+          exit 1
+       
+      - name: 🧪 Run Logic & Scientific Verification
+        run: |
+          echo "🚀 Initiating: $TEST_COMMAND"
+          $TEST_COMMAND
+      
+      - name: 🔍 Forensic Audit
+        if: always()
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "✅ All systems nominal. No anomalies detected in solver lifecycle."
+            cat <<EOF > src/debug/forensic_audit.sh
+          #!/bin/bash
+          # Description: Automated forensic audit for Navier-Stokes solver failures.
+          # Status: Dormant (All systems nominal)
+          exit 0
+          EOF
+            chmod +x src/debug/forensic_audit.sh
+            echo "🧹 Diagnostic script has been reset to Dormant mode."
+          else
+            echo "⚠️ CI Failure Detected. Initiating Deep Forensic Audit..."
+            echo "============================================================"
+            echo "ls -R output:"
+            ls -R
+            echo "============================================================"
+            echo "src/debug/forensic_audit.sh run results:"
+            if [ -f "src/debug/forensic_audit.sh" ]; then
+              bash src/debug/forensic_audit.sh
+            else
+              echo "❌ Critical: Diagnostic script 'src/debug/forensic_audit.sh' not found."
+            fi
+            echo "============================================================"
+            echo "📉 RE-RUNNING FAILED TEST FOR FINAL SIGNAL"
+            $TEST_COMMAND || true
+            exit 1
+          fi
+      
+      - name: 🧹 Sync Forensic Reset
+        # This only runs if the '🔍 Forensic Audit' step and tests passed
+        if: success()
+        env:
+          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
+          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+        run: |
+          # 1. Setup Identity
+          git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
+          git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
 
-      #     # Pull latest changes safely
-      #     git pull --rebase origin main || echo "⚠️ Pull failed or not needed"
-
-      #     # Restore stashed changes
-      #     git stash pop || echo "⚠️ Nothing to pop"
-
-      #     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-
-      #     # Update orchestrator_config.json
-      #     # echo '{ "enabled": false }' > config/orchestrator_config.json
-
-      #     # Update README.md with timestamped log
-      #     echo "# engineering_simulations_pipeline_autorun" > README.md
-      #     echo "" >> README.md
-      #     echo "🕒 The orchestrator_config.json flag was updated from true to false on $TIMESTAMP by '${{ github.actor }}' via '${{ github.event_name }}'." >> README.md
-      #     echo "" >> README.md
-      #     echo "✅ Your simulation run is complete. The orchestrator has been disabled to prevent blank or repeated runs." >> README.md
-      #     echo "" >> README.md
-      #     echo "🛑 To temporarily disable the orchestrator workflow:" >> README.md
-      #     echo "1. Go to your GitHub repository." >> README.md
-      #     echo "2. Click the **Actions** tab." >> README.md
-      #     echo "3. Select the **Orchestrator** workflow from the left sidebar." >> README.md
-      #     echo "4. Click the **Disable workflow** button near the top-right." >> README.md
-      #     echo "" >> README.md
-      #     echo "🔄 To start a new simulation run later:" >> README.md
-      #     echo "1. Open `config/orchestrator_config.json` and change `"enabled": false` to `"enabled": true`." >> README.md
-      #     echo "2. Commit and push your changes." >> README.md
-      #     echo "3. Go to the **Actions** tab → **Orchestrator** workflow." >> README.md
-      #     echo "4. Click **Enable workflow** to reactivate it." >> README.md
-
-      #     # Commit and push changes
-      #     git add config/orchestrator_config.json README.md
-      #     git commit -m "Disable orchestrator and log update on $TIMESTAMP"
-      #     git push origin main
-
-      # - name: Trigger Downstream Workflows via GitHub API
-      #   env:
-      #     GIT_PAT: ${{ secrets.GIT_PAT }}
-      #     APP_KEY: ${{ secrets.APP_KEY }}
-      #     APP_SECRET: ${{ secrets.APP_SECRET }}
-      #     REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-      #   run: |
-      #     INPUT_DIR="data/testing-input-output"
-      #     TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
-
-      #     trigger_workflow() {
-      #       REPO="$1"
-      #       WORKFLOW_FILE="$2"
-      #       echo "🚀 Dispatching $WORKFLOW_FILE in $REPO"
-
-      #       curl -X POST \
-      #         -H "Authorization: token $GIT_PAT" \
-      #         -H "Accept: application/vnd.github.v3+json" \
-      #         https://api.github.com/repos/$REPO/actions/workflows/$WORKFLOW_FILE/dispatches \
-      #         -d '{"ref":"main"}'
-      #     }
-
-      #     # Domain Grid Trigger
-      #     if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/enriched_metadata.json" ]; then
-      #       trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred" "fluid_simulation_pipeline.yml"
-      #     else
-      #       echo "ℹ️ Skipped Domain Grid Trigger: 'enriched_metadata.json' already exists or required inputs missing."
-      #     fi
-
-      #     # Boundary Mapping Trigger
-      #     if ls "$INPUT_DIR"/*.step &>/dev/null && \
-      #        [ -f "$INPUT_DIR/flow_data.json" ] && \
-      #        [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
-      #        [ -f "$INPUT_DIR/geometry_resolution_advice.json" ] && \
-      #        [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
-      #       trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred" "boundary_conditions_workflow.yml"
-      #     else
-      #       echo "ℹ️ Skipped Boundary Mapping Trigger: 'boundary_conditions_gmsh.json' already exists or prerequisites missing."
-      #     fi
-
-      #     # Geometry Masking Trigger
-      #     if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ -f "$INPUT_DIR/geometry_resolution_advice.json" ] && [ ! -f "$INPUT_DIR/geometry_masking_gmsh.json" ]; then
-      #       trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred" "geometry_masking_workflow.yml"
-      #     else
-      #       echo "ℹ️ Skipped Geometry Masking Trigger: 'geometry_masking_gmsh.json' already exists or prerequisites missing."
-      #     fi
-
-      #     # Run resolution sweep script only if enriched_metadata.json exists
-      #     if [ -f "$INPUT_DIR/enriched_metadata.json" ] && [ ! -f "$INPUT_DIR/geometry_resolution_advice.json" ]; then
-      #       echo "📊 Running resolution_sweep.py to compute and inject resolution advice..."
-      #       python3 src/resolution_sweep.py
-
-      #       echo "📊 Deleting the preliminary iteration files to run the final iteration..."
-            
-      #       # Cleanup logic
-      #       echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip, geometry_resolution_advice.json..."
-      #       find "$INPUT_DIR" -type f ! -name '*.step' \
-      #                         ! -name 'flow_data.json' \
-      #                         ! -name 'navier_stokes_output.zip' \
-      #                         ! -name 'navier_stokes_runs.zip' \
-      #                         ! -name 'geometry_resolution_advice.json' \
-      #                         -exec rm -v {} +
-
-      #       find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
-
-      #       echo "🧹 Cleaning Dropbox folder: deleting all files except .step and flow_data.json and geometry_resolution_advice.json..."
-      #       python3 src/download_dropbox_files.py cleanup "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
-
-      #     else
-      #       echo "🚫 Skipping resolution_sweep.py: enriched_metadata.json not found."
-      #     fi
-
-      #     # # Input Builder Trigger
-      #     # if [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
-      #     #    [ -f "$INPUT_DIR/boundary_conditions_gmsh.json" ] && \
-      #     #    [ -f "$INPUT_DIR/geometry_masking_gmsh.json" ] && \
-      #     #    [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
-      #     #   trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_input_builder_sred" "fluid_simulation_pipeline.yml"
-      #     # else
-      #     #   echo "ℹ️ Skipped Input Builder Trigger: 'fluid_simulation_input.json' already exists or prerequisites missing."
-      #     # fi
-
-      #     # # Fluid Dynamics Solver Trigger
-      #     # if [ -f "$INPUT_DIR/fluid_simulation_input.json" ] && \
-      #     #    [ ! -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
-      #     #   trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_fluid_dynamics_solver_sred" "fluid_dynamics_calculations.yml"
-      #     # else
-      #     #   echo "ℹ️ Skipped Fluid Dynamics Solver Trigger: 'navier_stokes_output.zip' already exists or prerequisites missing."
-      #     # fi
-
-      # - name: Archive Results + Trigger Integrity Investigation + Cleanup + Dropbox Sync
-      #   env:
-      #     GIT_PAT: ${{ secrets.GIT_PAT }}
-      #     APP_KEY: ${{ secrets.APP_KEY }}
-      #     APP_SECRET: ${{ secrets.APP_SECRET }}
-      #     REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-      #   run: |
-      #     INPUT_DIR="data/testing-input-output"
-      #     ARCHIVE_DIR="$INPUT_DIR/navier_stokes_runs"
-      #     ARCHIVE_ZIP="$INPUT_DIR/navier_stokes_runs.zip"
-      #     TIMESTAMP=$(date "+%Y-%m-%d_%H-%M-%S")
-      #     RUN_FOLDER="$ARCHIVE_DIR/$TIMESTAMP"
-
-      #     if [ -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
-      #       echo "✅ Detected navier_stokes_output.zip — proceeding with archival and cleanup..."
-
-      #       # Restore previous archive if exists
-      #       if [ -f "$ARCHIVE_ZIP" ]; then
-      #         echo "📦 Restoring previous archive from $ARCHIVE_ZIP"
-      #         unzip -q "$ARCHIVE_ZIP" -d "$ARCHIVE_DIR"
-      #       else
-      #         echo "📁 No previous archive found. Creating $ARCHIVE_DIR"
-      #         mkdir -p "$ARCHIVE_DIR"
-      #       fi
-
-      #       # Trigger Integrity Investigation
-      #       echo "🚀 Triggering integrity investigation workflow..."
-      #       curl -X POST \
-      #         -H "Authorization: token $GIT_PAT" \
-      #         -H "Accept: application/vnd.github.v3+json" \
-      #         https://api.github.com/repos/Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_integrity_investigation/actions/workflows/integrity_check.yml/dispatches \
-      #         -d '{"ref":"main"}'
-
-      #       # Archive current solver output
-      #       echo "📦 Archiving results to $RUN_FOLDER"
-      #       mkdir -p "$RUN_FOLDER"
-      #       unzip -q "$INPUT_DIR/navier_stokes_output.zip" -d "$RUN_FOLDER"
-
-      #       # Cleanup logic
-      #       echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip, geometry_resolution_advice.json..."
-      #       find "$INPUT_DIR" -type f ! -name '*.step' \
-      #                         ! -name 'flow_data.json' \
-      #                         ! -name 'navier_stokes_output.zip' \
-      #                         ! -name 'navier_stokes_runs.zip' \
-      #                         ! -name 'geometry_resolution_advice.json' \
-      #                         -exec rm -v {} +
-
-      #       find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
-
-      #       echo "🧹 Cleaning Dropbox folder: deleting all files except .step and flow_data.json and geometry_resolution_advice.json..."
-      #       python3 src/download_dropbox_files.py delete "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
+          # 2. Ensure the file is staged (The '🔍 Forensic Audit' step already created it)
+          git add src/debug/forensic_audit.sh
           
-      #       echo "🔁 Advancing resolution sweep..."
-      #       python3 src/advance_resolution_run.py
+          # 3. Commit and Push ONLY the Forensic Reset
+          if [ -n "$(git status --porcelain src/debug/forensic_audit.sh)" ]; then
+            git commit -m "🧹 forensic: reset diagnostic script to dormant [PASS]"
+            git push origin HEAD || echo "Push skipped: Concurrent push detected."
+          else
+            echo "✅ Forensic script already in dormant mode. No sync needed."
+          fi
 
-      #       # Remove old archive before creating new one
-      #       if [ -f "$ARCHIVE_ZIP" ]; then
-      #         echo "🗑️ Removing old archive: $ARCHIVE_ZIP"
-      #         rm -v "$ARCHIVE_ZIP"
-      #       else
-      #         echo "📁 No previous archive to remove."
-      #       fi
+  production_run:
+    name: "🚀 Production: Physics Execution"
+    needs: pre_flight_tests
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      APP_KEY: ${{ secrets.APP_KEY }}
+      APP_SECRET: ${{ secrets.APP_SECRET }}
+      REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+    steps:
+      - name: 🗂️ Checkout Repository
+        uses: actions/checkout@v4
 
-      #       # Zip updated archive
-      #       echo "📦 Zipping updated archive to $ARCHIVE_ZIP"
-      #       cd "$INPUT_DIR"
-      #       zip -r -q "navier_stokes_runs.zip" "navier_stokes_runs"
-      #       cd -
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      #     else
-      #       echo "🚫 Skipping archival and cleanup: navier_stokes_output.zip not found."
-      #     fi
+      - name: 📦 Install Dependencies
+        run: pip install -r requirements.txt
 
-      # - name: Upload Fluid Simulation Archive to Dropbox
-      #   env:
-      #     APP_KEY: ${{ secrets.APP_KEY }}
-      #     APP_SECRET: ${{ secrets.APP_SECRET }}
-      #     REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-      #   run: src/upload_to_dropbox.sh
+      - name: 🗂️ Pre-Download Repository State
+        run: |
+          ls -R
 
-      # - name: Final cleanup script
-      #   if: steps.flag_check.outputs.enabled == 'false'
-      #   env:
-      #     APP_KEY: ${{ secrets.APP_KEY }}
-      #     APP_SECRET: ${{ secrets.APP_SECRET }}
-      #     REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-      #   run: src/final_cleanup_script.sh
+      - name: 📥 Synchronize Input (Dropbox)
+        run: |
+          # Ensure execution permissions for the ingestion script
+          chmod +x src/download_from_dropbox.sh
+          ./src/download_from_dropbox.sh
+          
+          echo "--- testing-input-output folder content:---"
+          # FIX: Removed the leading slash. Path is relative to the repository root.
+          ls -R data/testing-input-output/
 
+      - name: 🌊 Execute Navier-Stokes Solver
+        run: |
+          # The solver requires the path to the synchronized input file
+          # PYTHONPATH ensures src/ is discoverable for internal imports
+          # export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+          python3 src/main_solver.py ./data/testing-input-output/fluid_simulation_input.json
 
+      - name: 📤 Synchronize Results (Dropbox)
+        if: success()
+        run: |
+          # Ensure execution permissions for the professional upload orchestrator
+          chmod +x src/upload_to_dropbox.sh
+          ./src/upload_to_dropbox.sh
+          
+          echo "--- Final Audit: testing-input-output folder content ---"
+          # Verified: Relative path without leading slash for GitHub runner compatibility
+          ls -R data/testing-input-output/
+          
+          echo "--- Full Repository State Post-Upload ---"
+          ls -R
 
+      - name: 📊 Audit Performance Ledger & Sync
+        if: always()
+        env:
+          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
+          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+        run: |
+          # 1. Setup Identity
+          git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
+          git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
+          
+          # 2. FORCE CLEANUP (The Nuclear Option)
+          # Discard all local changes to tracked files and remove untracked files
+          git reset --hard HEAD
+          git clean -ffdx
 
+          # 3. Initial Sync
+          git pull origin HEAD --rebase
 
+          # 4. Extract Metadata
+          RUN_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          STATUS="${{ job.status }}"
+          CURRENT_BRANCH=${GITHUB_REF##*/}
+          CPU_LOAD=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4 "%"}')
+          MEM_USAGE=$(free -m | awk '/Mem:/ { print $3 "/" $2 "MB" }')
 
+          # 5. Generate Audit Entry
+          NEW_ENTRY=$(cat <<EOF
+
+          ### Audit: $RUN_DATE
+          - **Branch:** \`$CURRENT_BRANCH\`
+          - **Status:** $STATUS
+          - **CPU Load:** $CPU_LOAD
+          - **Memory Usage:** $MEM_USAGE
+          ---
+          EOF
+          )
+
+          # 6. Update Ledger (Prepend Logic)
+          HEADER="# 🌊 Navier–Stokes Solver Performance Audit"
+          if [ -f "performance_audit.md" ]; then
+              tail -n +2 performance_audit.md > old_body.tmp
+              echo "$HEADER" > performance_audit.md
+              echo "$NEW_ENTRY" >> performance_audit.md
+              cat old_body.tmp >> performance_audit.md
+              rm old_body.tmp
+          else
+              echo "$HEADER" > performance_audit.md
+              echo "$NEW_ENTRY" >> performance_audit.md
+          fi
+
+          # 7. Commit and Final Push
+          git add performance_audit.md
+          
+          if [ -n "$(git status --porcelain performance_audit.md)" ]; then
+            git commit -m "📊 audit: [${{ job.status }}] update performance ledger"
+            # In case someone pushed to the repo in the last 10 seconds:
+            git pull origin HEAD --rebase
+            git push origin HEAD
+          else
+            echo "✅ No changes to the ledger."
+          fi
