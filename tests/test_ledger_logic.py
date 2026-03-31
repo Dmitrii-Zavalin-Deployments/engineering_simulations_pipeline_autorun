@@ -1,6 +1,5 @@
 # tests/test_ledger_logic.py
 
-import os
 import logging
 from src.core.update_ledger import LedgerManager
 
