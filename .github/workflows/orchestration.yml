@@ -152,46 +152,46 @@ jobs:
         run: |
           ls -R
 
-      - name: 📥 Synchronize Input (Dropbox)
-        run: |
-          # Ensure execution permissions for the ingestion script
-          chmod +x src/download_from_dropbox.sh
-          ./src/download_from_dropbox.sh
+      # - name: 📥 Synchronize Input (Dropbox)
+      #   run: |
+      #     # Ensure execution permissions for the ingestion script
+      #     chmod +x src/download_from_dropbox.sh
+      #     ./src/download_from_dropbox.sh
           
-          echo "--- testing-input-output folder content:---"
-          # FIX: Removed the leading slash. Path is relative to the repository root.
-          ls -R data/testing-input-output/
+      #     echo "--- testing-input-output folder content:---"
+      #     # FIX: Removed the leading slash. Path is relative to the repository root.
+      #     ls -R data/testing-input-output/
 
-      - name: ⚡ Execute Sovereign Logic Gate
-        run: |
-          # 1. Hydrate OrchestrationState from config/active_disk.json
-          # 2. Perform Forensic Scan of data/
-          # 3. Identify the 'Gap' and Dispatch Worker via GitHub API
-          python3 src/main_engine.py
+      # - name: ⚡ Execute Sovereign Logic Gate
+      #   run: |
+      #     # 1. Hydrate OrchestrationState from config/active_disk.json
+      #     # 2. Perform Forensic Scan of data/
+      #     # 3. Identify the 'Gap' and Dispatch Worker via GitHub API
+      #     python3 src/main_engine.py
 
-      - name: 📤 Synchronize State (Dropbox)
-        if: always()
-        run: |
-          chmod +x src/io/upload_to_dropbox.sh
-          ./src/io/upload_to_dropbox.sh
+      # - name: 📤 Synchronize State (Dropbox)
+      #   if: always()
+      #   run: |
+      #     chmod +x src/io/upload_to_dropbox.sh
+      #     ./src/io/upload_to_dropbox.sh
 
-      - name: 📊 Update Performance Audit Ledger
-        if: always()
-        env:
-          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
-          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
-        run: |
-          git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
-          git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
+      # - name: 📊 Update Performance Audit Ledger
+      #   if: always()
+      #   env:
+      #     GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
+      #     GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+      #   run: |
+      #     git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
+      #     git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
           
-          git reset --hard HEAD
-          git pull origin HEAD --rebase
+      #     git reset --hard HEAD
+      #     git pull origin HEAD --rebase
 
-          # Logic to prepend the ledger with the result of the Forensic Scan
-          python3 src/core/update_ledger.py "${{ job.status }}"
+      #     # Logic to prepend the ledger with the result of the Forensic Scan
+      #     python3 src/core/update_ledger.py "${{ job.status }}"
 
-          git add performance_audit.md
-          if [ -n "$(git status --porcelain performance_audit.md)" ]; then
-            git commit -m "📊 audit: [${{ job.status }}] engine cycle complete"
-            git push origin HEAD
-          fi
+      #     git add performance_audit.md
+      #     if [ -n "$(git status --porcelain performance_audit.md)" ]; then
+      #       git commit -m "📊 audit: [${{ job.status }}] engine cycle complete"
+      #       git push origin HEAD
+      #     fi
