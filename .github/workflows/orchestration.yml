@@ -18,259 +18,259 @@ jobs:
         with:
           python-version: "3.9"
 
-      - name: Check Orchestration Flag from Config
-        id: flag_check
-        run: |
-          ENABLED=$(jq -r '.enabled' config/orchestrator_config.json)
-          echo "enabled=$ENABLED" >> $GITHUB_OUTPUT
-        shell: bash
+      # - name: Check Orchestration Flag from Config
+      #   id: flag_check
+      #   run: |
+      #     ENABLED=$(jq -r '.enabled' config/orchestrator_config.json)
+      #     echo "enabled=$ENABLED" >> $GITHUB_OUTPUT
+      #   shell: bash
 
-      - name: Install Dependencies
-        if: steps.flag_check.outputs.enabled == 'true'
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      # - name: Install Dependencies
+      #   if: steps.flag_check.outputs.enabled == 'true'
+      #   run: |
+      #     python -m pip install --upgrade pip
+      #     pip install -r requirements.txt
 
-      - name: Make Dropbox Script Executable
-        if: steps.flag_check.outputs.enabled == 'true'
-        run: |
-          chmod +x src/download_from_dropbox.sh
-          chmod +x src/upload_to_dropbox.sh
-          chmod +x src/final_cleanup_script.sh
+      # - name: Make Dropbox Script Executable
+      #   if: steps.flag_check.outputs.enabled == 'true'
+      #   run: |
+      #     chmod +x src/download_from_dropbox.sh
+      #     chmod +x src/upload_to_dropbox.sh
+      #     chmod +x src/final_cleanup_script.sh
 
-      - name: Download Files from Dropbox
-        if: steps.flag_check.outputs.enabled == 'true'
-        env:
-          APP_KEY: ${{ secrets.APP_KEY }}
-          APP_SECRET: ${{ secrets.APP_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-        run: src/download_from_dropbox.sh
+      # - name: Download Files from Dropbox
+      #   if: steps.flag_check.outputs.enabled == 'true'
+      #   env:
+      #     APP_KEY: ${{ secrets.APP_KEY }}
+      #     APP_SECRET: ${{ secrets.APP_SECRET }}
+      #     REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+      #   run: src/download_from_dropbox.sh
 
-      - name: 🔒 Disable orchestrator and update README
-        if: steps.flag_check.outputs.enabled == 'true'
-        env:
-          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
-          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
-        run: |
-          # Configure Git
-          git config --global user.name "${GIT_USER_NAME}"
-          git config --global user.email "${GIT_USER_EMAIL}"
+      # - name: 🔒 Disable orchestrator and update README
+      #   if: steps.flag_check.outputs.enabled == 'true'
+      #   env:
+      #     GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
+      #     GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+      #   run: |
+      #     # Configure Git
+      #     git config --global user.name "${GIT_USER_NAME}"
+      #     git config --global user.email "${GIT_USER_EMAIL}"
 
-          # Stash any local changes to avoid rebase conflict
-          git stash --include-untracked || echo "⚠️ Nothing to stash"
+      #     # Stash any local changes to avoid rebase conflict
+      #     git stash --include-untracked || echo "⚠️ Nothing to stash"
 
-          # Pull latest changes safely
-          git pull --rebase origin main || echo "⚠️ Pull failed or not needed"
+      #     # Pull latest changes safely
+      #     git pull --rebase origin main || echo "⚠️ Pull failed or not needed"
 
-          # Restore stashed changes
-          git stash pop || echo "⚠️ Nothing to pop"
+      #     # Restore stashed changes
+      #     git stash pop || echo "⚠️ Nothing to pop"
 
-          TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+      #     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
-          # Update orchestrator_config.json
-          # echo '{ "enabled": false }' > config/orchestrator_config.json
+      #     # Update orchestrator_config.json
+      #     # echo '{ "enabled": false }' > config/orchestrator_config.json
 
-          # Update README.md with timestamped log
-          echo "# engineering_simulations_pipeline_autorun" > README.md
-          echo "" >> README.md
-          echo "🕒 The orchestrator_config.json flag was updated from true to false on $TIMESTAMP by '${{ github.actor }}' via '${{ github.event_name }}'." >> README.md
-          echo "" >> README.md
-          echo "✅ Your simulation run is complete. The orchestrator has been disabled to prevent blank or repeated runs." >> README.md
-          echo "" >> README.md
-          echo "🛑 To temporarily disable the orchestrator workflow:" >> README.md
-          echo "1. Go to your GitHub repository." >> README.md
-          echo "2. Click the **Actions** tab." >> README.md
-          echo "3. Select the **Orchestrator** workflow from the left sidebar." >> README.md
-          echo "4. Click the **Disable workflow** button near the top-right." >> README.md
-          echo "" >> README.md
-          echo "🔄 To start a new simulation run later:" >> README.md
-          echo "1. Open `config/orchestrator_config.json` and change `"enabled": false` to `"enabled": true`." >> README.md
-          echo "2. Commit and push your changes." >> README.md
-          echo "3. Go to the **Actions** tab → **Orchestrator** workflow." >> README.md
-          echo "4. Click **Enable workflow** to reactivate it." >> README.md
+      #     # Update README.md with timestamped log
+      #     echo "# engineering_simulations_pipeline_autorun" > README.md
+      #     echo "" >> README.md
+      #     echo "🕒 The orchestrator_config.json flag was updated from true to false on $TIMESTAMP by '${{ github.actor }}' via '${{ github.event_name }}'." >> README.md
+      #     echo "" >> README.md
+      #     echo "✅ Your simulation run is complete. The orchestrator has been disabled to prevent blank or repeated runs." >> README.md
+      #     echo "" >> README.md
+      #     echo "🛑 To temporarily disable the orchestrator workflow:" >> README.md
+      #     echo "1. Go to your GitHub repository." >> README.md
+      #     echo "2. Click the **Actions** tab." >> README.md
+      #     echo "3. Select the **Orchestrator** workflow from the left sidebar." >> README.md
+      #     echo "4. Click the **Disable workflow** button near the top-right." >> README.md
+      #     echo "" >> README.md
+      #     echo "🔄 To start a new simulation run later:" >> README.md
+      #     echo "1. Open `config/orchestrator_config.json` and change `"enabled": false` to `"enabled": true`." >> README.md
+      #     echo "2. Commit and push your changes." >> README.md
+      #     echo "3. Go to the **Actions** tab → **Orchestrator** workflow." >> README.md
+      #     echo "4. Click **Enable workflow** to reactivate it." >> README.md
 
-          # Commit and push changes
-          git add config/orchestrator_config.json README.md
-          git commit -m "Disable orchestrator and log update on $TIMESTAMP"
-          git push origin main
+      #     # Commit and push changes
+      #     git add config/orchestrator_config.json README.md
+      #     git commit -m "Disable orchestrator and log update on $TIMESTAMP"
+      #     git push origin main
 
-      - name: Trigger Downstream Workflows via GitHub API
-        env:
-          GIT_PAT: ${{ secrets.GIT_PAT }}
-          APP_KEY: ${{ secrets.APP_KEY }}
-          APP_SECRET: ${{ secrets.APP_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-        run: |
-          INPUT_DIR="data/testing-input-output"
-          TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
+      # - name: Trigger Downstream Workflows via GitHub API
+      #   env:
+      #     GIT_PAT: ${{ secrets.GIT_PAT }}
+      #     APP_KEY: ${{ secrets.APP_KEY }}
+      #     APP_SECRET: ${{ secrets.APP_SECRET }}
+      #     REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+      #   run: |
+      #     INPUT_DIR="data/testing-input-output"
+      #     TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
 
-          trigger_workflow() {
-            REPO="$1"
-            WORKFLOW_FILE="$2"
-            echo "🚀 Dispatching $WORKFLOW_FILE in $REPO"
+      #     trigger_workflow() {
+      #       REPO="$1"
+      #       WORKFLOW_FILE="$2"
+      #       echo "🚀 Dispatching $WORKFLOW_FILE in $REPO"
 
-            curl -X POST \
-              -H "Authorization: token $GIT_PAT" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/$REPO/actions/workflows/$WORKFLOW_FILE/dispatches \
-              -d '{"ref":"main"}'
-          }
+      #       curl -X POST \
+      #         -H "Authorization: token $GIT_PAT" \
+      #         -H "Accept: application/vnd.github.v3+json" \
+      #         https://api.github.com/repos/$REPO/actions/workflows/$WORKFLOW_FILE/dispatches \
+      #         -d '{"ref":"main"}'
+      #     }
 
-          # Domain Grid Trigger
-          if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/enriched_metadata.json" ]; then
-            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred" "fluid_simulation_pipeline.yml"
-          else
-            echo "ℹ️ Skipped Domain Grid Trigger: 'enriched_metadata.json' already exists or required inputs missing."
-          fi
+      #     # Domain Grid Trigger
+      #     if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ ! -f "$INPUT_DIR/enriched_metadata.json" ]; then
+      #       trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_domain_grid_sred" "fluid_simulation_pipeline.yml"
+      #     else
+      #       echo "ℹ️ Skipped Domain Grid Trigger: 'enriched_metadata.json' already exists or required inputs missing."
+      #     fi
 
-          # Boundary Mapping Trigger
-          if ls "$INPUT_DIR"/*.step &>/dev/null && \
-             [ -f "$INPUT_DIR/flow_data.json" ] && \
-             [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
-             [ -f "$INPUT_DIR/geometry_resolution_advice.json" ] && \
-             [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
-            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred" "boundary_conditions_workflow.yml"
-          else
-            echo "ℹ️ Skipped Boundary Mapping Trigger: 'boundary_conditions_gmsh.json' already exists or prerequisites missing."
-          fi
+      #     # Boundary Mapping Trigger
+      #     if ls "$INPUT_DIR"/*.step &>/dev/null && \
+      #        [ -f "$INPUT_DIR/flow_data.json" ] && \
+      #        [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
+      #        [ -f "$INPUT_DIR/geometry_resolution_advice.json" ] && \
+      #        [ ! -f "$INPUT_DIR/boundary_conditions_gmsh.json" ]; then
+      #       trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_boundary_mapping_sred" "boundary_conditions_workflow.yml"
+      #     else
+      #       echo "ℹ️ Skipped Boundary Mapping Trigger: 'boundary_conditions_gmsh.json' already exists or prerequisites missing."
+      #     fi
 
-          # Geometry Masking Trigger
-          if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ -f "$INPUT_DIR/geometry_resolution_advice.json" ] && [ ! -f "$INPUT_DIR/geometry_masking_gmsh.json" ]; then
-            trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred" "geometry_masking_workflow.yml"
-          else
-            echo "ℹ️ Skipped Geometry Masking Trigger: 'geometry_masking_gmsh.json' already exists or prerequisites missing."
-          fi
+      #     # Geometry Masking Trigger
+      #     if ls "$INPUT_DIR"/*.step &>/dev/null && [ -f "$INPUT_DIR/flow_data.json" ] && [ -f "$INPUT_DIR/geometry_resolution_advice.json" ] && [ ! -f "$INPUT_DIR/geometry_masking_gmsh.json" ]; then
+      #       trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_geometry_masking_sred" "geometry_masking_workflow.yml"
+      #     else
+      #       echo "ℹ️ Skipped Geometry Masking Trigger: 'geometry_masking_gmsh.json' already exists or prerequisites missing."
+      #     fi
 
-          # Run resolution sweep script only if enriched_metadata.json exists
-          if [ -f "$INPUT_DIR/enriched_metadata.json" ] && [ ! -f "$INPUT_DIR/geometry_resolution_advice.json" ]; then
-            echo "📊 Running resolution_sweep.py to compute and inject resolution advice..."
-            python3 src/resolution_sweep.py
+      #     # Run resolution sweep script only if enriched_metadata.json exists
+      #     if [ -f "$INPUT_DIR/enriched_metadata.json" ] && [ ! -f "$INPUT_DIR/geometry_resolution_advice.json" ]; then
+      #       echo "📊 Running resolution_sweep.py to compute and inject resolution advice..."
+      #       python3 src/resolution_sweep.py
 
-            echo "📊 Deleting the preliminary iteration files to run the final iteration..."
+      #       echo "📊 Deleting the preliminary iteration files to run the final iteration..."
             
-            # Cleanup logic
-            echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip, geometry_resolution_advice.json..."
-            find "$INPUT_DIR" -type f ! -name '*.step' \
-                              ! -name 'flow_data.json' \
-                              ! -name 'navier_stokes_output.zip' \
-                              ! -name 'navier_stokes_runs.zip' \
-                              ! -name 'geometry_resolution_advice.json' \
-                              -exec rm -v {} +
+      #       # Cleanup logic
+      #       echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip, geometry_resolution_advice.json..."
+      #       find "$INPUT_DIR" -type f ! -name '*.step' \
+      #                         ! -name 'flow_data.json' \
+      #                         ! -name 'navier_stokes_output.zip' \
+      #                         ! -name 'navier_stokes_runs.zip' \
+      #                         ! -name 'geometry_resolution_advice.json' \
+      #                         -exec rm -v {} +
 
-            find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
+      #       find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
 
-            echo "🧹 Cleaning Dropbox folder: deleting all files except .step and flow_data.json and geometry_resolution_advice.json..."
-            python3 src/download_dropbox_files.py cleanup "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
+      #       echo "🧹 Cleaning Dropbox folder: deleting all files except .step and flow_data.json and geometry_resolution_advice.json..."
+      #       python3 src/download_dropbox_files.py cleanup "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
 
-          else
-            echo "🚫 Skipping resolution_sweep.py: enriched_metadata.json not found."
-          fi
+      #     else
+      #       echo "🚫 Skipping resolution_sweep.py: enriched_metadata.json not found."
+      #     fi
 
-          # # Input Builder Trigger
-          # if [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
-          #    [ -f "$INPUT_DIR/boundary_conditions_gmsh.json" ] && \
-          #    [ -f "$INPUT_DIR/geometry_masking_gmsh.json" ] && \
-          #    [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
-          #   trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_input_builder_sred" "fluid_simulation_pipeline.yml"
-          # else
-          #   echo "ℹ️ Skipped Input Builder Trigger: 'fluid_simulation_input.json' already exists or prerequisites missing."
-          # fi
+      #     # # Input Builder Trigger
+      #     # if [ -f "$INPUT_DIR/enriched_metadata.json" ] && \
+      #     #    [ -f "$INPUT_DIR/boundary_conditions_gmsh.json" ] && \
+      #     #    [ -f "$INPUT_DIR/geometry_masking_gmsh.json" ] && \
+      #     #    [ ! -f "$INPUT_DIR/fluid_simulation_input.json" ]; then
+      #     #   trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_input_builder_sred" "fluid_simulation_pipeline.yml"
+      #     # else
+      #     #   echo "ℹ️ Skipped Input Builder Trigger: 'fluid_simulation_input.json' already exists or prerequisites missing."
+      #     # fi
 
-          # # Fluid Dynamics Solver Trigger
-          # if [ -f "$INPUT_DIR/fluid_simulation_input.json" ] && \
-          #    [ ! -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
-          #   trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_fluid_dynamics_solver_sred" "fluid_dynamics_calculations.yml"
-          # else
-          #   echo "ℹ️ Skipped Fluid Dynamics Solver Trigger: 'navier_stokes_output.zip' already exists or prerequisites missing."
-          # fi
+      #     # # Fluid Dynamics Solver Trigger
+      #     # if [ -f "$INPUT_DIR/fluid_simulation_input.json" ] && \
+      #     #    [ ! -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
+      #     #   trigger_workflow "Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_fluid_dynamics_solver_sred" "fluid_dynamics_calculations.yml"
+      #     # else
+      #     #   echo "ℹ️ Skipped Fluid Dynamics Solver Trigger: 'navier_stokes_output.zip' already exists or prerequisites missing."
+      #     # fi
 
-      - name: Archive Results + Trigger Integrity Investigation + Cleanup + Dropbox Sync
-        env:
-          GIT_PAT: ${{ secrets.GIT_PAT }}
-          APP_KEY: ${{ secrets.APP_KEY }}
-          APP_SECRET: ${{ secrets.APP_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-        run: |
-          INPUT_DIR="data/testing-input-output"
-          ARCHIVE_DIR="$INPUT_DIR/navier_stokes_runs"
-          ARCHIVE_ZIP="$INPUT_DIR/navier_stokes_runs.zip"
-          TIMESTAMP=$(date "+%Y-%m-%d_%H-%M-%S")
-          RUN_FOLDER="$ARCHIVE_DIR/$TIMESTAMP"
+      # - name: Archive Results + Trigger Integrity Investigation + Cleanup + Dropbox Sync
+      #   env:
+      #     GIT_PAT: ${{ secrets.GIT_PAT }}
+      #     APP_KEY: ${{ secrets.APP_KEY }}
+      #     APP_SECRET: ${{ secrets.APP_SECRET }}
+      #     REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+      #   run: |
+      #     INPUT_DIR="data/testing-input-output"
+      #     ARCHIVE_DIR="$INPUT_DIR/navier_stokes_runs"
+      #     ARCHIVE_ZIP="$INPUT_DIR/navier_stokes_runs.zip"
+      #     TIMESTAMP=$(date "+%Y-%m-%d_%H-%M-%S")
+      #     RUN_FOLDER="$ARCHIVE_DIR/$TIMESTAMP"
 
-          if [ -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
-            echo "✅ Detected navier_stokes_output.zip — proceeding with archival and cleanup..."
+      #     if [ -f "$INPUT_DIR/navier_stokes_output.zip" ]; then
+      #       echo "✅ Detected navier_stokes_output.zip — proceeding with archival and cleanup..."
 
-            # Restore previous archive if exists
-            if [ -f "$ARCHIVE_ZIP" ]; then
-              echo "📦 Restoring previous archive from $ARCHIVE_ZIP"
-              unzip -q "$ARCHIVE_ZIP" -d "$ARCHIVE_DIR"
-            else
-              echo "📁 No previous archive found. Creating $ARCHIVE_DIR"
-              mkdir -p "$ARCHIVE_DIR"
-            fi
+      #       # Restore previous archive if exists
+      #       if [ -f "$ARCHIVE_ZIP" ]; then
+      #         echo "📦 Restoring previous archive from $ARCHIVE_ZIP"
+      #         unzip -q "$ARCHIVE_ZIP" -d "$ARCHIVE_DIR"
+      #       else
+      #         echo "📁 No previous archive found. Creating $ARCHIVE_DIR"
+      #         mkdir -p "$ARCHIVE_DIR"
+      #       fi
 
-            # Trigger Integrity Investigation
-            echo "🚀 Triggering integrity investigation workflow..."
-            curl -X POST \
-              -H "Authorization: token $GIT_PAT" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_integrity_investigation/actions/workflows/integrity_check.yml/dispatches \
-              -d '{"ref":"main"}'
+      #       # Trigger Integrity Investigation
+      #       echo "🚀 Triggering integrity investigation workflow..."
+      #       curl -X POST \
+      #         -H "Authorization: token $GIT_PAT" \
+      #         -H "Accept: application/vnd.github.v3+json" \
+      #         https://api.github.com/repos/Dmitrii-Zavalin-Deployments/engineering_simulations_pipeline_integrity_investigation/actions/workflows/integrity_check.yml/dispatches \
+      #         -d '{"ref":"main"}'
 
-            # Archive current solver output
-            echo "📦 Archiving results to $RUN_FOLDER"
-            mkdir -p "$RUN_FOLDER"
-            unzip -q "$INPUT_DIR/navier_stokes_output.zip" -d "$RUN_FOLDER"
+      #       # Archive current solver output
+      #       echo "📦 Archiving results to $RUN_FOLDER"
+      #       mkdir -p "$RUN_FOLDER"
+      #       unzip -q "$INPUT_DIR/navier_stokes_output.zip" -d "$RUN_FOLDER"
 
-            # Cleanup logic
-            echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip, geometry_resolution_advice.json..."
-            find "$INPUT_DIR" -type f ! -name '*.step' \
-                              ! -name 'flow_data.json' \
-                              ! -name 'navier_stokes_output.zip' \
-                              ! -name 'navier_stokes_runs.zip' \
-                              ! -name 'geometry_resolution_advice.json' \
-                              -exec rm -v {} +
+      #       # Cleanup logic
+      #       echo "🧹 Cleaning local folder: preserving .step, flow_data.json, navier_stokes_output.zip, navier_stokes_runs.zip, geometry_resolution_advice.json..."
+      #       find "$INPUT_DIR" -type f ! -name '*.step' \
+      #                         ! -name 'flow_data.json' \
+      #                         ! -name 'navier_stokes_output.zip' \
+      #                         ! -name 'navier_stokes_runs.zip' \
+      #                         ! -name 'geometry_resolution_advice.json' \
+      #                         -exec rm -v {} +
 
-            find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
+      #       find "$INPUT_DIR" -mindepth 1 -maxdepth 1 -type d ! -name 'navier_stokes_runs' -exec rm -rfv {} +
 
-            echo "🧹 Cleaning Dropbox folder: deleting all files except .step and flow_data.json and geometry_resolution_advice.json..."
-            python3 src/download_dropbox_files.py delete "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
+      #       echo "🧹 Cleaning Dropbox folder: deleting all files except .step and flow_data.json and geometry_resolution_advice.json..."
+      #       python3 src/download_dropbox_files.py delete "/engineering_simulations_pipeline" "$REFRESH_TOKEN" "$APP_KEY" "$APP_SECRET" "./dropbox_download_log.txt"
           
-            echo "🔁 Advancing resolution sweep..."
-            python3 src/advance_resolution_run.py
+      #       echo "🔁 Advancing resolution sweep..."
+      #       python3 src/advance_resolution_run.py
 
-            # Remove old archive before creating new one
-            if [ -f "$ARCHIVE_ZIP" ]; then
-              echo "🗑️ Removing old archive: $ARCHIVE_ZIP"
-              rm -v "$ARCHIVE_ZIP"
-            else
-              echo "📁 No previous archive to remove."
-            fi
+      #       # Remove old archive before creating new one
+      #       if [ -f "$ARCHIVE_ZIP" ]; then
+      #         echo "🗑️ Removing old archive: $ARCHIVE_ZIP"
+      #         rm -v "$ARCHIVE_ZIP"
+      #       else
+      #         echo "📁 No previous archive to remove."
+      #       fi
 
-            # Zip updated archive
-            echo "📦 Zipping updated archive to $ARCHIVE_ZIP"
-            cd "$INPUT_DIR"
-            zip -r -q "navier_stokes_runs.zip" "navier_stokes_runs"
-            cd -
+      #       # Zip updated archive
+      #       echo "📦 Zipping updated archive to $ARCHIVE_ZIP"
+      #       cd "$INPUT_DIR"
+      #       zip -r -q "navier_stokes_runs.zip" "navier_stokes_runs"
+      #       cd -
 
-          else
-            echo "🚫 Skipping archival and cleanup: navier_stokes_output.zip not found."
-          fi
+      #     else
+      #       echo "🚫 Skipping archival and cleanup: navier_stokes_output.zip not found."
+      #     fi
 
-      - name: Upload Fluid Simulation Archive to Dropbox
-        env:
-          APP_KEY: ${{ secrets.APP_KEY }}
-          APP_SECRET: ${{ secrets.APP_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-        run: src/upload_to_dropbox.sh
+      # - name: Upload Fluid Simulation Archive to Dropbox
+      #   env:
+      #     APP_KEY: ${{ secrets.APP_KEY }}
+      #     APP_SECRET: ${{ secrets.APP_SECRET }}
+      #     REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+      #   run: src/upload_to_dropbox.sh
 
-      - name: Final cleanup script
-        if: steps.flag_check.outputs.enabled == 'false'
-        env:
-          APP_KEY: ${{ secrets.APP_KEY }}
-          APP_SECRET: ${{ secrets.APP_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-        run: src/final_cleanup_script.sh
+      # - name: Final cleanup script
+      #   if: steps.flag_check.outputs.enabled == 'false'
+      #   env:
+      #     APP_KEY: ${{ secrets.APP_KEY }}
+      #     APP_SECRET: ${{ secrets.APP_SECRET }}
+      #     REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+      #   run: src/final_cleanup_script.sh
 
 
 
