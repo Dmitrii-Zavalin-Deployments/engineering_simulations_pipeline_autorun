@@ -1,7 +1,6 @@
 # tests/test_forensic_logic.py
 
 import json
-import pytest
 from src.core.state_engine import OrchestrationState
 
 def test_forensic_gap_detection(tmp_path):
