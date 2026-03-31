@@ -3,6 +3,7 @@
 import json
 import logging
 from pathlib import Path
+from jsonschema import validate, ValidationError
 
 # Configure Logger for State Registry Traceability
 logging.basicConfig(
@@ -14,12 +15,14 @@ logger = logging.getLogger("Engine.State")
 class OrchestrationState:
     """
     Forensic Artifact Registry.
-    Phase C Compliance: Rule 0 (__slots__) & Idempotency Contract.
+    Phase C Compliance: Rule 0 (__slots__), Idempotency Contract, and Schema Sovereignty.
     """
-    __slots__ = ['project_id', 'manifest_url', 'data_path', 'manifest_data']
+    __slots__ = ['project_id', 'manifest_url', 'data_path', 'manifest_data', 'schema_path']
 
     def __init__(self, config_path: str, data_root: str):
         self.data_path = Path(data_root)
+        self.schema_path = Path("config/core_schema.json")
+        
         # Rule: The Machine Must Clean Itself - ensure path exists but stays stateless
         self.data_path.mkdir(parents=True, exist_ok=True)
         
@@ -39,16 +42,25 @@ class OrchestrationState:
     def hydrate_manifest(self, manifest_json: dict):
         """
         Runtime Hydration: Schema Sovereignty check before execution.
+        Rule: A 'corrupt disk' (Schema Violation) results in an immediate Hard-Halt.
         """
-        # Rule 4: Explicit Key Validation (Zero-Default Policy)
-        required = ["manifest_id", "pipeline_steps"]
-        for key in required:
-            if key not in manifest_json:
-                logger.error(f"Manifest malformed. Missing key: '{key}'")
-                raise KeyError(f"❌ CRITICAL: Manifest malformed. Missing: '{key}'")
-        
-        self.manifest_data = manifest_json
-        logger.info(f"💿 Registry Hydrated: [{manifest_json['manifest_id']}]")
+        try:
+            # 1. Load the "Law of the Disc" (Schema)
+            with open(self.schema_path, 'r', encoding="utf-8") as s:
+                schema = json.load(s)
+            
+            # 2. Structural Audit
+            validate(instance=manifest_json, schema=schema)
+            
+            self.manifest_data = manifest_json
+            logger.info(f"💿 Registry Hydrated & Validated: [{manifest_json['manifest_id']}]")
+            
+        except FileNotFoundError:
+            logger.error("Core Schema missing at config/core_schema.json.")
+            raise RuntimeError("❌ CRITICAL: Schema Missing. Validation aborted.")
+        except ValidationError as e:
+            logger.critical(f"Manifest Schema Violation: {e.message}")
+            raise RuntimeError(f"❌ CRITICAL: Hard-Halt. Manifest is corrupt. {e.message}")
 
     def forensic_artifact_scan(self):
         """
@@ -56,7 +68,7 @@ class OrchestrationState:
         Filesystem truth is absolute. Resumes by identifying the first
         'Requirement' that lacks a 'Production' artifact.
         
-        Rule 4 Guard: Explicit failure if scan is attempted before hydration.
+        Agnostic Execution: The Engine is blind to physics, only checking existence.
         """
         if not self.manifest_data:
             logger.critical("Engine logic breach. Scan attempted without Manifest Hydration.")
@@ -68,9 +80,10 @@ class OrchestrationState:
             input_evidence = all((self.data_path / f).exists() for f in step['requires'])
             
             # Check if any outputs (Produces) are missing
+            # Using any() ensures that if a step is partially failed, it restarts.
             output_missing = any(not (self.data_path / f).exists() for f in step['produces'])
 
-            # The 'Gap' is found when inputs exist but outputs do not.
+            # The 'Gate' opens when inputs exist but outputs do not.
             if input_evidence and output_missing:
                 logger.info(f"🔍 Forensic Scan: Gate OPEN for step [{step['name']}]")
                 return step
