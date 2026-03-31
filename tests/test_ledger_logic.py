@@ -1,6 +1,5 @@
 # tests/test_ledger_logic.py
 
-import os
 from src.core.update_ledger import LedgerManager
 
 def test_ledger_prepend_order(tmp_path):
