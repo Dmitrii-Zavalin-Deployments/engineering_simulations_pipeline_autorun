@@ -44,9 +44,11 @@ class OrchestrationState:
         IDEMPOTENCY CONTRACT:
         Filesystem truth is absolute. Resumes by identifying the first
         'Requirement' that lacks a 'Production' artifact.
+        
+        Rule 4 Guard: Explicit failure if scan is attempted before hydration.
         """
         if not self.manifest_data:
-            raise RuntimeError("Engine not hydrated. Cannot perform Forensic Scan.")
+            raise RuntimeError("❌ CRITICAL: Engine logic breach. Scan attempted without Manifest Hydration.")
 
         for step in self.manifest_data["pipeline_steps"]:
             # Rule: Evidence-Based Verification
