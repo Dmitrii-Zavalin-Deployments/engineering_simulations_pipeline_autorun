@@ -9,10 +9,13 @@ Compliance:
 - Rule 8 (API Minimalism): Unified interface for token management.
 """
 
+import logging
 from typing import Final
 
 import requests
 
+# Standard logger setup
+logger = logging.getLogger(__name__)
 
 class TokenManager:
     """
@@ -26,11 +29,14 @@ class TokenManager:
         # Rule 5: Deterministic Initialization
         self._client_id = client_id
         self._client_secret = client_secret
+        logger.debug("TokenManager initialized with explicit configuration.")
 
     def refresh_access_token(self, refresh_token: str) -> str:
         """
         Refreshes the OAuth2 access token.
         """
+        logger.info("Attempting to refresh Dropbox access token...")
+        
         payload = {
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
@@ -38,12 +44,18 @@ class TokenManager:
             "client_secret": self._client_secret
         }
         
-        response = requests.post(self.TOKEN_URL, data=payload)
-        
-        if response.status_code == 200:
-            return response.json()["access_token"]
-        
-        # Explicit error reporting for CI/CD logs
-        raise RuntimeError(
-            f"❌ Dropbox Auth Failed | Status: {response.status_code} | Body: {response.text}"
-        )
+        try:
+            response = requests.post(self.TOKEN_URL, data=payload)
+            
+            if response.status_code == 200:
+                logger.info("✅ Dropbox access token successfully refreshed.")
+                return response.json()["access_token"]
+            
+            # Log the failure before raising
+            error_msg = f"❌ Dropbox Auth Failed | Status: {response.status_code} | Body: {response.text}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+        except requests.exceptions.RequestException as e:
+            logger.critical(f"Network error during Dropbox authentication: {str(e)}")
+            raise

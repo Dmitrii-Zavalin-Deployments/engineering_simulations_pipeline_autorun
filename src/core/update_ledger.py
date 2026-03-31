@@ -1,12 +1,21 @@
 # src/core/update_ledger.py
 
 import os
+import logging
 from datetime import datetime, timezone
+
+# Configure Logger for Engine Traceability
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+)
+logger = logging.getLogger("Engine.Ledger")
 
 class LedgerManager:
     """
     The Traceability Bridge (Performance Audit Ledger).
     Phase C Compliance: Rule 0 (__slots__) & Rule 5 (Performance Logging).
+    Optimization: Platinum-grade deterministic error handling.
     """
     __slots__ = ['log_path']
 
@@ -25,22 +34,28 @@ class LedgerManager:
         header = "# 🛰️ Simulation Engine Performance Audit\n\n"
         new_entry = f"## [{timestamp}] {category}\n- **Message:** {message}{meta_str}\n\n---\n\n"
 
-        # Read existing content to prepend
         existing_content = ""
         if os.path.exists(self.log_path):
             try:
-                current_text = open(self.log_path, "r", encoding="utf-8").read()
-                # Remove header from old content to avoid duplication during prepend
-                existing_content = current_text.replace(header, "")
-            except Exception:
+                with open(self.log_path, "r", encoding="utf-8") as f:
+                    current_text = f.read()
+                    # Remove header from old content to avoid duplication during prepend
+                    existing_content = current_text.replace(header, "")
+            except (FileNotFoundError, IOError) as e:
+                # Platinum Compliance: Deterministic error catching vs blanket Exception
+                logger.warning(f"Ledger Read Warning: {e}. Starting fresh buffer.")
                 existing_content = ""
 
         # Phase C: Rule 1 - Resource Protection (Atomic Write with Explicit Encoding)
-        with open(self.log_path, "w", encoding="utf-8") as f:
-            f.write(header + new_entry + existing_content)
+        try:
+            with open(self.log_path, "w", encoding="utf-8") as f:
+                f.write(header + new_entry + existing_content)
+        except IOError as e:
+            logger.error(f"Critical Ledger Write Failure: {e}")
 
     def log_dispatch(self, project_id: str, manifest_id: str, step_name: str, target_repo: str):
         """Standardized mapping for Dispatch events."""
+        logger.info(f"🚀 Dispatching Worker: {step_name} -> {target_repo}")
         self.record_event(
             category="🚀 DISPATCH",
             message=f"Worker activated for step: {step_name}",
@@ -56,7 +71,9 @@ class LedgerManager:
         msg = f"Scan Result: {status}"
         if gap:
             msg += f" | Gap detected at: {gap}"
-            
+        
+        logger.info(f"🔍 Forensic Scan [{project_id}]: {status}")
+        
         self.record_event(
             category="🔍 FORENSIC_SCAN",
             message=msg,

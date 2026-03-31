@@ -1,7 +1,15 @@
 # src/core/state_engine.py
 
 import json
+import logging
 from pathlib import Path
+
+# Configure Logger for State Registry Traceability
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+)
+logger = logging.getLogger("Engine.State")
 
 class OrchestrationState:
     """
@@ -17,12 +25,14 @@ class OrchestrationState:
         
         # 1. Mounting Protocol (Single-Slot Rule)
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding="utf-8") as f:
                 config = json.load(f)
+                # Rule 4: Explicit or Error - No .get() defaults
                 self.project_id = config['project_id']
                 self.manifest_url = config['manifest_url']
-        except (FileNotFoundError, KeyError) as e:
-            raise RuntimeError(f"❌ CRITICAL: Mounting Failed. active_disk.json invalid: {e}")
+        except (FileNotFoundError, KeyError, json.JSONDecodeError) as e:
+            logger.critical(f"Mounting Failed. active_disk.json invalid or missing: {e}")
+            raise RuntimeError(f"❌ CRITICAL: Mounting Failed. {e}")
         
         self.manifest_data = None
 
@@ -34,10 +44,11 @@ class OrchestrationState:
         required = ["manifest_id", "pipeline_steps"]
         for key in required:
             if key not in manifest_json:
+                logger.error(f"Manifest malformed. Missing key: '{key}'")
                 raise KeyError(f"❌ CRITICAL: Manifest malformed. Missing: '{key}'")
         
         self.manifest_data = manifest_json
-        print(f"💿 Registry Hydrated: [{manifest_json['manifest_id']}]")
+        logger.info(f"💿 Registry Hydrated: [{manifest_json['manifest_id']}]")
 
     def forensic_artifact_scan(self):
         """
@@ -48,7 +59,8 @@ class OrchestrationState:
         Rule 4 Guard: Explicit failure if scan is attempted before hydration.
         """
         if not self.manifest_data:
-            raise RuntimeError("❌ CRITICAL: Engine logic breach. Scan attempted without Manifest Hydration.")
+            logger.critical("Engine logic breach. Scan attempted without Manifest Hydration.")
+            raise RuntimeError("❌ CRITICAL: Scan attempted without Manifest Hydration.")
 
         for step in self.manifest_data["pipeline_steps"]:
             # Rule: Evidence-Based Verification
@@ -60,8 +72,8 @@ class OrchestrationState:
 
             # The 'Gap' is found when inputs exist but outputs do not.
             if input_evidence and output_missing:
-                print(f"🔍 Forensic Scan: Gate OPEN for [{step['name']}]")
+                logger.info(f"🔍 Forensic Scan: Gate OPEN for step [{step['name']}]")
                 return step
         
-        print("✅ Forensic Scan: Pipeline saturated. No gaps detected.")
+        logger.info("✅ Forensic Scan: Pipeline saturated. No gaps detected.")
         return None

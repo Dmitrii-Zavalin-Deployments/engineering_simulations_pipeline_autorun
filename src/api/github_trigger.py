@@ -1,8 +1,16 @@
 # src/api/github_trigger.py
 
 import os
+import logging
 import requests
 from typing import Dict, Any
+
+# Configure Logger for Dispatch Traceability
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+)
+logger = logging.getLogger("Engine.Dispatcher")
 
 class Dispatcher:
     """
@@ -16,6 +24,7 @@ class Dispatcher:
         # Standardized to GITHUB_TOKEN for nomadic environment compatibility
         self.token = os.getenv("GITHUB_TOKEN")
         if not self.token:
+            logger.critical("GITHUB_TOKEN not found in environment. Access Denied.")
             raise RuntimeError("❌ CRITICAL: GITHUB_TOKEN not found. Dispatch aborted.")
         
         self.headers = {
@@ -37,19 +46,20 @@ class Dispatcher:
             "client_payload": payload
         }
 
-        print(f"📡 Dispatching Signal: [{target_repo}] for Step [{payload.get('step')}]")
+        step_name = payload.get('step', 'UNKNOWN_STEP')
+        logger.info(f"📡 Dispatching Signal: [{target_repo}] for Step [{step_name}]")
 
         try:
             # Phase C: Rule 1 - Resource Protection (Timeout enforced)
             response = requests.post(url, json=data, headers=self.headers, timeout=10)
             
             if response.status_code == 204:
-                print(f"🚀 Signal Accepted: {target_repo} activation confirmed.")
+                logger.info(f"🚀 Signal Accepted: {target_repo} activation confirmed.")
                 return True
             
-            print(f"❌ Dispatch Failed [{response.status_code}]: {response.text}")
+            logger.error(f"Dispatch Failed [{response.status_code}]: {response.text}")
             return False
                 
         except requests.exceptions.RequestException as e:
-            print(f"❌ Connection Error during Dispatch: {e}")
+            logger.error(f"Connection Error during Dispatch to {target_repo}: {e}")
             return False
