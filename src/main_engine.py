@@ -4,6 +4,7 @@ import sys
 import requests
 from src.core.state_engine import OrchestrationState
 from src.api.github_trigger import Dispatcher
+from src.core.update_ledger import LedgerManager
 
 def run_engine():
     """
@@ -14,6 +15,9 @@ def run_engine():
     # Pathing aligned with nomadic local structure
     CONFIG_PATH = "config/active_disk.json"
     DATA_PATH = "data/testing-input-output/"
+    
+    # Initialize Ledger (The Performance Audit Bridge)
+    ledger = LedgerManager()
 
     # 1. Ephemeral Initialization (Foundation Mounting)
     state = OrchestrationState(CONFIG_PATH, DATA_PATH)
@@ -25,13 +29,21 @@ def run_engine():
         response = requests.get(state.manifest_url, timeout=15)
         response.raise_for_status()
         state.hydrate_manifest(response.json())
+        ledger.record_event("📥 HYDRATION", "Manifest successfully mounted from remote.")
     except Exception as e:
-        print(f"❌ Critical: Manifest Acquisition Failed: {e}")
+        error_msg = f"Manifest Acquisition Failed: {str(e)}"
+        ledger.record_event("❌ CRITICAL", error_msg)
+        print(f"❌ {error_msg}")
         sys.exit(1)
 
     # 3. Forensic Discovery (Idempotency Contract)
     # The 'Gate' only opens if Inputs exist AND Outputs are missing.
     target_step = state.forensic_artifact_scan()
+    
+    if target_step:
+        ledger.log_scan(state.project_id, "GAP_DETECTED", gap=target_step['name'])
+    else:
+        ledger.log_scan(state.project_id, "SATURATED")
 
     # 4. Dispatch (The Command Link)
     if target_step:
@@ -49,12 +61,21 @@ def run_engine():
             
             # Trigger worker and terminate (Non-blocking pulse)
             success = dispatcher.trigger_worker(target_step['target_repo'], payload)
-            if not success:
+            
+            if success:
+                ledger.log_dispatch(
+                    state.project_id, 
+                    state.manifest_data["manifest_id"], 
+                    target_step['name'], 
+                    target_step['target_repo']
+                )
+                print(f"🚀 Dispatch Successful: {target_step['name']}")
+            else:
+                # Failure logged inside dispatcher or caught in next scan
                 sys.exit(1)
                 
-            print(f"🚀 Dispatch Successful: Worker [{target_step['target_repo']}] activated.")
-            
         except RuntimeError as e:
+            ledger.record_event("❌ DISPATCH_ERROR", str(e))
             print(e)
             sys.exit(1)
     else:
