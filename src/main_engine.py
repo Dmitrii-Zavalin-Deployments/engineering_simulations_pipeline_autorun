@@ -61,5 +61,5 @@ def run_engine():
         # Saturated state prevents "Double-Spend" of compute resources.
         print("🏁 Mission Saturated: Logic Gates are all closed. Standing down.")
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     run_engine()
