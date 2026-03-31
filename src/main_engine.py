@@ -7,30 +7,31 @@ from src.api.github_trigger import Dispatcher
 
 def run_engine():
     """
-    The Sovereign Orchestrator Execution Cycle.
+    Sovereign Lifecycle: Download -> Evaluate -> Dispatch.
+    Phase C, Section 2: The Isolation Mandate.
     """
+    # Paths aligned with dmitrii@computer directory structure
     CONFIG_PATH = "config/active_disk.json"
     DATA_PATH = "data/testing-input-output/"
 
-    # 1. Initialize Console (Zero-Knowledge)
+    # 1. Ephemeral Initialization
     state = OrchestrationState(CONFIG_PATH, DATA_PATH)
-    print(f"🛰️ Engine Active: Project [{state.project_id}]")
+    print(f"🛰️ Engine Active: [{state.project_id}]")
 
-    # 2. Disc Ingestion (External Authority)
+    # 2. Remote Manifest Acquisition (External Authority)
     try:
-        print(f"📥 Mounting Remote Disc: {state.manifest_url}")
+        print(f"📥 Fetching Manifest: {state.manifest_url}")
         response = requests.get(state.manifest_url, timeout=15)
         response.raise_for_status()
-        
-        # Hydration: Turning JSON into Living Logic
         state.hydrate_manifest(response.json())
     except Exception as e:
-        print(f"❌ Critical: Mounting Failed. {e}")
+        print(f"❌ Critical: Manifest Acquisition Failed: {e}")
         sys.exit(1)
 
-    # 3. Forensic Scan & Dispatch
+    # 3. Forensic Discovery (Idempotency Contract)
     target_step = state.forensic_artifact_scan()
 
+    # 4. Logic Gate & Dispatch
     if target_step:
         dispatcher = Dispatcher()
         payload = {
@@ -39,12 +40,15 @@ def run_engine():
             "step": target_step['name']
         }
         
-        if dispatcher.trigger_worker(target_step['target_repo'], payload):
-            print(f"🚀 Signal Sent to Worker: {target_step['target_repo']}")
-        else:
+        # Trigger the remote worker (Nomadic Execution)
+        success = dispatcher.trigger_worker(target_step['target_repo'], payload)
+        if not success:
+            print(f"❌ Dispatch Failed for step: {target_step['name']}")
             sys.exit(1)
+        print(f"🚀 Dispatch Successful: {target_step['name']}")
     else:
-        print("✅ Pipeline Saturated. No action required.")
+        # Saturated state: All artifacts found.
+        print("🏁 Mission Complete: Logic Gates are all closed.")
 
 if __name__ == "__main__":
     run_engine()
