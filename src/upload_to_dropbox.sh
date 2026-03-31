@@ -1,41 +1,53 @@
 #!/bin/bash
+# src/upload_to_dropbox.sh
+# 📤 Dropbox Upload Orchestrator — Professional Cloud Export Gate.
 
-APP_KEY="${APP_KEY}"
-APP_SECRET="${APP_SECRET}"
-REFRESH_TOKEN="${REFRESH_TOKEN}"
-DROPBOX_UPLOAD_FOLDER="/engineering_simulations_pipeline"
-
-LOCAL_OUTPUT_DIR="$GITHUB_WORKSPACE/data/testing-input-output"
-
-echo "🔄 Attempting to upload files from ${LOCAL_OUTPUT_DIR} to Dropbox folder ${DROPBOX_UPLOAD_FOLDER}..."
-
-# Ensure the directory exists
-if [ ! -d "$LOCAL_OUTPUT_DIR" ]; then
-    echo "❌ ERROR: Directory $LOCAL_OUTPUT_DIR does not exist."
+# 1. Environment Guard
+if [[ -z "${APP_KEY}" || -z "${APP_SECRET}" || -z "${REFRESH_TOKEN}" ]]; then
+    echo "❌ ERROR: Missing required credentials."
     exit 1
 fi
 
-# Loop through all files in the directory
-for file in "$LOCAL_OUTPUT_DIR"/*; do
-    if [ -f "$file" ]; then
-        echo "📤 Uploading $file..."
-        python3 src/upload_to_dropbox.py \
-            "$file" \
-            "$DROPBOX_UPLOAD_FOLDER" \
-            "$REFRESH_TOKEN" \
-            "$APP_KEY" \
-            "$APP_SECRET"
+# 2. Path Resolution
+# We look for the zip in the testing-input-output folder where the solver usually outputs
+BASE_WORK_DIR=$(pwd)
+DEFAULT_ZIP="${BASE_WORK_DIR}/data/testing-input-output/navier_stokes_output.zip"
+export LOCAL_ZIP_PATH="${1:-$DEFAULT_ZIP}"
 
-        if [ $? -eq 0 ]; then
-            echo "✅ Successfully uploaded $file to Dropbox."
-        else
-            echo "❌ ERROR: Failed to upload $file to Dropbox."
-            exit 1
-        fi
-    fi
-done
+# 3. Validation
+if [ ! -f "$LOCAL_ZIP_PATH" ]; then
+    echo "❌ ERROR: Target file not found at $LOCAL_ZIP_PATH."
+    # List directory to help debug why it's missing in logs
+    ls -R data/
+    exit 1
+fi
 
-echo "🎉 All files uploaded successfully!"
+export PYTHONPATH="${PYTHONPATH}:${BASE_WORK_DIR}"
 
+echo "🔄 Triggering Python CloudUploader for: $LOCAL_ZIP_PATH"
 
+# 4. Execution
+python3 -c "
+from pathlib import Path
+from src.io.dropbox_utils import TokenManager
+from src.io.upload_to_dropbox import CloudUploader
+import os
 
+# Deterministic Init
+tm = TokenManager(client_id=os.environ['APP_KEY'], client_secret=os.environ['APP_SECRET'])
+uploader = CloudUploader(tm, os.environ['REFRESH_TOKEN'])
+
+# Execute
+uploader.upload(
+    Path(os.environ['LOCAL_ZIP_PATH']), 
+    '/engineering_simulations_pipeline'
+)
+"
+
+# 5. Final Result Audit
+if [ $? -eq 0 ]; then
+    echo "✅ PIPELINE COMPLETE: Upload successful."
+else
+    echo "❌ CRITICAL ERROR: Dropbox upload failed."
+    exit 1
+fi
