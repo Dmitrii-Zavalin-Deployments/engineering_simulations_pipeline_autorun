@@ -7,14 +7,15 @@ from src.api.github_trigger import Dispatcher
 
 def run_engine():
     """
-    Sovereign Lifecycle: Download -> Evaluate -> Dispatch.
+    Sovereign Lifecycle: The Periodic Pulse.
+    Logic: Mount -> Forensic Scan -> Dispatch -> Terminate.
     Phase C, Section 2: The Isolation Mandate.
     """
-    # Paths aligned with dmitrii@computer directory structure
+    # Pathing aligned with nomadic local structure
     CONFIG_PATH = "config/active_disk.json"
     DATA_PATH = "data/testing-input-output/"
 
-    # 1. Ephemeral Initialization
+    # 1. Ephemeral Initialization (Foundation Mounting)
     state = OrchestrationState(CONFIG_PATH, DATA_PATH)
     print(f"🛰️ Engine Active: [{state.project_id}]")
 
@@ -29,26 +30,36 @@ def run_engine():
         sys.exit(1)
 
     # 3. Forensic Discovery (Idempotency Contract)
+    # The 'Gate' only opens if Inputs exist AND Outputs are missing.
     target_step = state.forensic_artifact_scan()
 
-    # 4. Logic Gate & Dispatch
+    # 4. Dispatch (The Command Link)
     if target_step:
-        dispatcher = Dispatcher()
-        payload = {
-            "project_id": state.project_id,
-            "manifest_id": state.manifest_data["manifest_id"],
-            "step": target_step['name']
-        }
-        
-        # Trigger the remote worker (Nomadic Execution)
-        success = dispatcher.trigger_worker(target_step['target_repo'], payload)
-        if not success:
-            print(f"❌ Dispatch Failed for step: {target_step['name']}")
+        try:
+            dispatcher = Dispatcher()
+            
+            # Construct JSON Payload for the nomadic worker
+            payload = {
+                "project_id": state.project_id,
+                "manifest_id": state.manifest_data["manifest_id"],
+                "step": target_step['name'],
+                "requires": target_step['requires'],
+                "produces": target_step['produces']
+            }
+            
+            # Trigger worker and terminate (Non-blocking pulse)
+            success = dispatcher.trigger_worker(target_step['target_repo'], payload)
+            if not success:
+                sys.exit(1)
+                
+            print(f"🚀 Dispatch Successful: Worker [{target_step['target_repo']}] activated.")
+            
+        except RuntimeError as e:
+            print(e)
             sys.exit(1)
-        print(f"🚀 Dispatch Successful: {target_step['name']}")
     else:
-        # Saturated state: All artifacts found.
-        print("🏁 Mission Complete: Logic Gates are all closed.")
+        # Saturated state prevents "Double-Spend" of compute resources.
+        print("🏁 Mission Saturated: Logic Gates are all closed. Standing down.")
 
 if __name__ == "__main__":
     run_engine()
