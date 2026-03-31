@@ -1,4 +1,4 @@
-name: Navier–Stokes Solver
+name: "Artifact-Driven Simulation Engine"
 
 on:
   push:
@@ -40,7 +40,7 @@ jobs:
         run: |
           ruff check src tests --fix
 
-      - name: 🚀 Commit & Push Auto-Clean Changes
+      - name: 🚀 Commit & Push Hygiene Changes
         if: always()
         env:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
@@ -50,7 +50,7 @@ jobs:
           git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
           git add .
           if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "🧹 Auto-clean: structural hygiene"
+            git commit -m "🧹 Auto-clean: structural hygiene [Engine]"
             git push || echo "Push skipped: branch protected."
           fi
 
@@ -130,11 +130,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: ${{ github.workspace }}
-      APP_KEY: ${{ secrets.APP_KEY }}
-      APP_SECRET: ${{ secrets.APP_SECRET }}
-      REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+      # Secrets for both Dropbox (Artifacts) and GitHub (Dispatching)
+      DROPBOX_APP_KEY: ${{ secrets.APP_KEY }}
+      DROPBOX_APP_SECRET: ${{ secrets.APP_SECRET }}
+      DROPBOX_REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+      GH_PAT: ${{ secrets.GH_PAT }} # Personal Access Token to trigger other repos
+    
     steps:
-      - name: 🗂️ Checkout Repository
+      - name: 🗂️ Checkout Engine
         uses: actions/checkout@v4
 
       - name: 🐍 Setup Python 3.11
@@ -159,85 +162,36 @@ jobs:
           # FIX: Removed the leading slash. Path is relative to the repository root.
           ls -R data/testing-input-output/
 
-      - name: 🌊 Execute Navier-Stokes Solver
+      - name: ⚡ Execute Sovereign Logic Gate
         run: |
-          # The solver requires the path to the synchronized input file
-          # PYTHONPATH ensures src/ is discoverable for internal imports
-          # export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-          python3 src/main_solver.py ./data/testing-input-output/fluid_simulation_input.json
+          # 1. Hydrate OrchestrationState from config/active_disk.json
+          # 2. Perform Forensic Scan of data/
+          # 3. Identify the 'Gap' and Dispatch Worker via GitHub API
+          python3 src/main_engine.py
 
-      - name: 📤 Synchronize Results (Dropbox)
-        if: success()
+      - name: 📤 Synchronize State (Dropbox)
+        if: always()
         run: |
-          # Ensure execution permissions for the professional upload orchestrator
-          chmod +x src/upload_to_dropbox.sh
-          ./src/upload_to_dropbox.sh
-          
-          echo "--- Final Audit: testing-input-output folder content ---"
-          # Verified: Relative path without leading slash for GitHub runner compatibility
-          ls -R data/testing-input-output/
-          
-          echo "--- Full Repository State Post-Upload ---"
-          ls -R
+          chmod +x src/io/upload_to_dropbox.sh
+          ./src/io/upload_to_dropbox.sh
 
-      - name: 📊 Audit Performance Ledger & Sync
+      - name: 📊 Update Performance Audit Ledger
         if: always()
         env:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         run: |
-          # 1. Setup Identity
           git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
           git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
           
-          # 2. FORCE CLEANUP (The Nuclear Option)
-          # Discard all local changes to tracked files and remove untracked files
           git reset --hard HEAD
-          git clean -ffdx
-
-          # 3. Initial Sync
           git pull origin HEAD --rebase
 
-          # 4. Extract Metadata
-          RUN_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          STATUS="${{ job.status }}"
-          CURRENT_BRANCH=${GITHUB_REF##*/}
-          CPU_LOAD=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4 "%"}')
-          MEM_USAGE=$(free -m | awk '/Mem:/ { print $3 "/" $2 "MB" }')
+          # Logic to prepend the ledger with the result of the Forensic Scan
+          python3 src/core/update_ledger.py "${{ job.status }}"
 
-          # 5. Generate Audit Entry
-          NEW_ENTRY=$(cat <<EOF
-
-          ### Audit: $RUN_DATE
-          - **Branch:** \`$CURRENT_BRANCH\`
-          - **Status:** $STATUS
-          - **CPU Load:** $CPU_LOAD
-          - **Memory Usage:** $MEM_USAGE
-          ---
-          EOF
-          )
-
-          # 6. Update Ledger (Prepend Logic)
-          HEADER="# 🌊 Navier–Stokes Solver Performance Audit"
-          if [ -f "performance_audit.md" ]; then
-              tail -n +2 performance_audit.md > old_body.tmp
-              echo "$HEADER" > performance_audit.md
-              echo "$NEW_ENTRY" >> performance_audit.md
-              cat old_body.tmp >> performance_audit.md
-              rm old_body.tmp
-          else
-              echo "$HEADER" > performance_audit.md
-              echo "$NEW_ENTRY" >> performance_audit.md
-          fi
-
-          # 7. Commit and Final Push
           git add performance_audit.md
-          
           if [ -n "$(git status --porcelain performance_audit.md)" ]; then
-            git commit -m "📊 audit: [${{ job.status }}] update performance ledger"
-            # In case someone pushed to the repo in the last 10 seconds:
-            git pull origin HEAD --rebase
+            git commit -m "📊 audit: [${{ job.status }}] engine cycle complete"
             git push origin HEAD
-          else
-            echo "✅ No changes to the ledger."
           fi
