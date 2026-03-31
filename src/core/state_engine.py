@@ -1,7 +1,6 @@
 # src/core/state_engine.py
 
 import json
-import os
 from pathlib import Path
 
 class OrchestrationState:
@@ -9,18 +8,21 @@ class OrchestrationState:
     The 'Console' State. 
     Hydrated from the Manifest, it performs the Forensic Artifact Scan 
     to determine the current reality of the simulation.
+    
+    Phase C Compliance: Rule 0 (__slots__) and Rule 4 (Zero-Default Policy).
     """
     __slots__ = ['project_id', 'manifest_url', 'data_path', 'manifest_data']
 
     def __init__(self, config_path: str, data_root: str):
         self.data_path = Path(data_root)
         
-        # Ensure the foundation exists
+        # Ensure the foundation exists (The Infrastructure Sink)
         self.data_path.mkdir(parents=True, exist_ok=True)
         
-        # Mounting Protocol: Identify the mission
+        # Mounting Protocol: Phase A, Section 1 (Single-Slot Rule)
         with open(config_path, 'r') as f:
             config = json.load(f)
+            # Rule 4: Explicit assignment ensures early failure if config is malformed
             self.project_id = config['project_id']
             self.manifest_url = config['manifest_url']
         
@@ -33,19 +35,20 @@ class OrchestrationState:
     def forensic_artifact_scan(self):
         """
         Deterministic Idempotency Rule: 
-        Interrogates the filesystem. A step triggers ONLY if:
-        - Requirements (Inputs) EXIST
-        - Productions (Outputs) are MISSING
+        Interrogates the physical /data directory.
+        Rule 4 Compliance: No .get() fallbacks. Explicit or Error.
         """
         if not self.manifest_data:
             raise RuntimeError("Engine not hydrated. Insert Manifest before scanning.")
 
-        for step in self.manifest_data.get("pipeline_steps", []):
+        # Phase C, Rule 4: Access keys directly. 
+        # If 'pipeline_steps' is missing, the engine MUST crash to prevent silent debt.
+        for step in self.manifest_data["pipeline_steps"]:
             name = step['name']
-            requires = step.get("requires", [])
-            produces = step.get("produces", [])
+            requires = step['requires']
+            produces = step['produces']
 
-            # Evidence-Based Check
+            # Evidence-Based Check: Truth exists only in physical artifacts
             input_evidence = all((self.data_path / f).exists() for f in requires)
             output_missing = any(not (self.data_path / f).exists() for f in produces)
 
