@@ -1,6 +1,5 @@
 # tests/test_boot_logic.py
 
-import pytest
 import json
 from unittest.mock import patch, MagicMock
 from src.core.bootloader import Bootloader
