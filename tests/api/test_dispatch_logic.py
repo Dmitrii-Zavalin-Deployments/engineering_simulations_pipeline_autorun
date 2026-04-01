@@ -57,7 +57,7 @@ def test_real_world_integration_handshake():
     dispatcher = Dispatcher()
     success = dispatcher.trigger_worker(target_repo, payload)
 
-        if not success and os.getenv("GH_PAT"):
-            pytest.skip("⚠️ Live Handshake Refused: Check GH_PAT scopes or rate limits.")
+    if not success and os.getenv("GH_PAT"):
+        pytest.skip("⚠️ Live Handshake Refused: Check GH_PAT scopes or rate limits.")
     assert success is True
     print(f"\n✅ Pulse Sent. Verify Run ID [{test_run_id}] in GitHub Actions for {target_repo}")
