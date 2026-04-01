@@ -1,6 +1,5 @@
 import pytest
 import os
-import requests
 from unittest.mock import patch, MagicMock
 from src.io.dropbox_utils import TokenManager
 from src.io.download_from_dropbox import CloudIngestor
