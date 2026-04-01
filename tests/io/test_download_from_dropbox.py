@@ -3,7 +3,7 @@
 import pytest
 import os
 from unittest.mock import patch
-from src.io.dropbox_utils import DropboxClient  # Assuming standard naming convention
+from src.io.dropbox_utils import TokenManager  # Assuming standard naming convention
 
 # Rule 5: Operational Hygiene - Verifying Deterministic Sync Logic
 
