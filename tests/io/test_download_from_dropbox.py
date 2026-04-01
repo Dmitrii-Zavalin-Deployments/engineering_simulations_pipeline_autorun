@@ -44,7 +44,7 @@ class TestCloudIngestor:
         Ensures 'list_folder' logic correctly follows cursors for large datasets.
         Rule 1: Isolation Mandate - Prevents partial artifact sync.
         """
-        with patch('src.io.dropbox_utils.DropboxClient.call_api') as mock_api:
+        with patch('src.io.dropbox_utils.TokenManager.call_api') as mock_api:
             # Mock a 2-page directory listing
             mock_api.side_effect = [
                 {"entries": [{"name": "file1.json"}], "has_more": True, "cursor": "c1"},
