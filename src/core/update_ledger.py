@@ -3,60 +3,65 @@
 import os
 import logging
 from datetime import datetime, timezone
+from typing import Optional, Dict
 
 # Configure Logger for Engine Traceability
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
-)
 logger = logging.getLogger("Engine.Ledger")
 
 class LedgerManager:
     """
     The Traceability Bridge (Performance Audit Ledger).
-    Phase C Compliance: Rule 0 (__slots__) & Rule 5 (Performance Logging).
-    Optimization: Platinum-grade deterministic error handling & Atomic Prepending.
+    Phase C Compliance: 
+    - Rule 0: __slots__ Mandatory Architecture
+    - Rule 4: Zero-Default Policy (Explicit or Error)
+    - Rule 5: Operational Hygiene (Audit Trail)
     """
-    __slots__ = ['log_path']
+    
+    # Rule 0: Eliminate dict overhead for nomadic scalability
+    __slots__ = ['log_path', 'header']
 
     def __init__(self, log_path: str = "performance_audit.md"):
         self.log_path = log_path
+        self.header = "# 🛰️ Simulation Engine Performance Audit\n\n"
 
-    def record_event(self, category: str, message: str, metadata: dict = None):
+    def record_event(self, category: str, message: str, metadata: Optional[Dict] = None):
         """
-        Prepends a structured entry to the ledger.
+        Prepends a structured entry to the ledger using Atomic Prepending.
         Ensures the 'Pulse' history remains chronological (Newest First).
         """
-        # Using UTC for nomadic synchronization consistency
+        # Rule 5: Using UTC for nomadic synchronization consistency
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         meta_str = f" | {metadata}" if metadata else ""
         
-        header = "# 🛰️ Simulation Engine Performance Audit\n\n"
         new_entry = f"## [{timestamp}] {category}\n- **Message:** {message}{meta_str}\n\n---\n\n"
 
         existing_content = ""
         if os.path.exists(self.log_path):
             try:
+                # Rule 1: Explicit Encoding Mandate
                 with open(self.log_path, "r", encoding="utf-8") as f:
                     current_text = f.read()
-                    # Remove header from old content to avoid duplication during prepend
-                    existing_content = current_text.replace(header, "")
+                    # Strip existing header to avoid duplication during the prepend cycle
+                    existing_content = current_text.replace(self.header, "")
             except (FileNotFoundError, IOError) as e:
-                logger.warning(f"Ledger Read Warning: {e}. Starting fresh buffer.")
+                logger.warning(f"Ledger Read Warning: {e}. Re-initializing buffer.")
                 existing_content = ""
 
-        # Phase C: Rule 1 - Resource Protection (Atomic Write with Explicit Encoding)
+        # Phase C: Rule 1 & 5 - Resource Protection (Atomic Write)
         try:
             with open(self.log_path, "w", encoding="utf-8") as f:
-                f.write(header + new_entry + existing_content)
+                f.write(self.header + new_entry + existing_content)
         except IOError as e:
-            logger.error(f"Critical Ledger Write Failure: {e}")
+            # Rule 4: Hard-Halt on critical I/O failure
+            logger.critical(f"Critical Ledger Write Failure: {e}")
+            raise RuntimeError(f"❌ CRITICAL: Could not update audit ledger. {e}")
 
-    def log_scan(self, project_id: str, status: str, gap: str = "NONE"):
-        """Standardized mapping for Forensic Scan results (The IDENTIFY phase)."""
-        msg = f"Forensic Scan Result: {status}"
-        if gap != "NONE":
-            msg += f" | Target Step Found: {gap}"
+    def log_scan(self, project_id: str, status: str, gap: str):
+        """
+        Standardized mapping for Forensic Scan results (The IDENTIFY phase).
+        Rule 4 Correction: 'gap' is now required to prevent silent default logic.
+        """
+        msg = f"Forensic Scan Result: {status} | Target: {gap}"
         
         logger.info(f"🔍 Forensic Scan [{project_id}]: {status}")
         self.record_event(
@@ -66,7 +71,10 @@ class LedgerManager:
         )
 
     def log_dispatch(self, project_id: str, manifest_id: str, step_name: str, target_repo: str):
-        """Standardized mapping for Dispatch events (The DISPATCH phase)."""
+        """
+        Standardized mapping for Dispatch events (The DISPATCH phase).
+        Rule 4: Explicit key passing for manifest_id and project_id.
+        """
         logger.info(f"🚀 Dispatching Worker: {step_name} -> {target_repo}")
         self.record_event(
             category="🚀 DISPATCH",

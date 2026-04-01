@@ -1,4 +1,4 @@
-# tests/test_boot_logic.py
+# tests/core/test_boot_logic.py
 
 import json
 from unittest.mock import patch, MagicMock

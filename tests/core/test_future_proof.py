@@ -1,4 +1,4 @@
-# tests/test_future_proof.py
+# tests/core/test_future_proof.py
 
 import pytest
 import json

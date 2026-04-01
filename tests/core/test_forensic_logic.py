@@ -1,4 +1,4 @@
-# tests/test_forensic_logic.py
+# tests/core/test_forensic_logic.py
 
 import pytest
 import json
