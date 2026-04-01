@@ -90,28 +90,61 @@ jobs:
           exit 1
 
       - name: 🧪 Run Logic & Scientific Verification
-        run: $TEST_COMMAND
+        run: |
+          echo "🚀 Initiating: $TEST_COMMAND"
+          $TEST_COMMAND
       
-      - name: 🔍 Forensic Audit & Reset
+      - name: 🔍 Forensic Audit
         if: always()
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "✅ All systems nominal. No anomalies detected in solver lifecycle."
+            cat <<EOF > src/debug/forensic_audit.sh
+          #!/bin/bash
+          # Description: Automated forensic audit for Navier-Stokes solver failures.
+          # Status: Dormant (All systems nominal)
+          exit 0
+          EOF
+            chmod +x src/debug/forensic_audit.sh
+            echo "🧹 Diagnostic script has been reset to Dormant mode."
+          else
+            echo "⚠️ CI Failure Detected. Initiating Deep Forensic Audit..."
+            echo "============================================================"
+            echo "ls -R output:"
+            ls -R
+            echo "============================================================"
+            echo "src/debug/forensic_audit.sh run results:"
+            if [ -f "src/debug/forensic_audit.sh" ]; then
+              bash src/debug/forensic_audit.sh
+            else
+              echo "❌ Critical: Diagnostic script 'src/debug/forensic_audit.sh' not found."
+            fi
+            echo "============================================================"
+            echo "📉 RE-RUNNING FAILED TEST FOR FINAL SIGNAL"
+            $TEST_COMMAND || true
+            exit 1
+          fi
+      
+      - name: 🧹 Sync Forensic Reset
+        # This only runs if the '🔍 Forensic Audit' step and tests passed
+        if: success()
         env:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         run: |
-          if [[ "${{ job.status }}" == "success" ]]; then
-            echo "✅ Systems nominal."
-            cat <<EOF > src/debug/forensic_audit.sh
-          #!/bin/bash
-          exit 0
-          EOF
-            chmod +x src/debug/forensic_audit.sh
-            git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
-            git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
-            git add src/debug/forensic_audit.sh
-            [ -n "$(git status --porcelain)" ] && git commit -m "🧹 forensic: reset" && git push
+          # 1. Setup Identity
+          git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
+          git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
+
+          # 2. Ensure the file is staged (The '🔍 Forensic Audit' step already created it)
+          git add src/debug/forensic_audit.sh
+          
+          # 3. Commit and Push ONLY the Forensic Reset
+          if [ -n "$(git status --porcelain src/debug/forensic_audit.sh)" ]; then
+            git commit -m "🧹 forensic: reset diagnostic script to dormant [PASS]"
+            git push origin HEAD || echo "Push skipped: Concurrent push detected."
           else
-            echo "⚠️ CI Failure. Manual audit required."
-            exit 1
+            echo "✅ Forensic script already in dormant mode. No sync needed."
           fi
 
   production_run:
