@@ -137,29 +137,35 @@ jobs:
       - name: 📦 Install Dependencies
         run: pip install -r requirements.txt
 
-      # - name: 📥 Synchronize Input (Dropbox)
-      #   run: |
-      #     chmod +x src/download_from_dropbox.sh
-      #     ./src/download_from_dropbox.sh
+      - name: 📥 Synchronize Input (Dropbox)
+        env:
+          APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+        run: |
+          chmod +x src/download_from_dropbox.sh
+          ./src/download_from_dropbox.sh
 
-      # - name: ⚡ Execute Sovereign Logic Gate
-      #   run: python3 src/main_engine.py
+      - name: ⚡ Execute Sovereign Logic Gate
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: python3 src/main_engine.py
 
-      # - name: 📊 Sync Audit & Dormancy State
-      #   if: always()
-      #   env:
-      #     GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
-      #     GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
-      #   run: |
-      #     # Rule 5: Operational Hygiene. Commit audit ledger and dormancy flag.
-      #     git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
-      #     git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
+      - name: 📊 Sync Audit & Dormancy State
+        if: always()
+        env:
+          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
+          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
+        run: |
+          # Rule 5: Operational Hygiene. Commit audit ledger and dormancy flag.
+          git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
+          git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
           
-      #     # Force pull to ensure sync with hygiene commits from previous job
-      #     git pull origin HEAD --rebase
+          # Force pull to ensure sync with hygiene commits from previous job
+          git pull origin HEAD --rebase
           
-      #     git add performance_audit.md config/dormant.flag
-      #     if [ -n "$(git status --porcelain)" ]; then
-      #       git commit -m "📊 audit: cycle complete [${{ job.status }}]"
-      #       git push origin HEAD
-      #     fi
+          git add performance_audit.md config/dormant.flag
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "📊 audit: cycle complete [${{ job.status }}]"
+            git push origin HEAD
+          fi
