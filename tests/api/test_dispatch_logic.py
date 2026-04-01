@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 @patch('requests.post')
 def test_dispatch_signal_success(mock_post):
     """Verifies 204 status results in successful dispatch."""
-    with patch.dict('os.environ', {'GITHUB_TOKEN': 'test_token_alpha'}):
+    with patch.dict('os.environ', {'GH_PAT': 'test_token_alpha'}):
         mock_response = MagicMock()
         mock_response.status_code = 204
         mock_post.return_value = mock_response
@@ -27,9 +27,9 @@ def test_dispatch_signal_success(mock_post):
         mock_post.assert_called_once()
 
 def test_dispatch_fails_without_token():
-    """Rule 4 Compliance: Explicit error when GITHUB_TOKEN is missing."""
+    """Rule 4 Compliance: Explicit error when GH_PAT is missing."""
     with patch.dict('os.environ', {}, clear=True):
-        with pytest.raises(RuntimeError, match="GITHUB_TOKEN not found"):
+        with pytest.raises(RuntimeError, match="GH_PAT not found"):
             Dispatcher()
 
 # --- PRODUCTION TEST (REAL-WORLD) ---
@@ -39,8 +39,8 @@ def test_real_world_integration_handshake():
     PRODUCTION TEST: End-to-End Handshake.
     Verifies the Engine can talk to the live navier-stokes-solver.
     """
-    if not os.getenv("GITHUB_TOKEN"):
-        pytest.skip("Skipping Real-World test: GITHUB_TOKEN not set.")
+    if not os.getenv("GH_PAT"):
+        pytest.skip("Skipping Real-World test: GH_PAT not set.")
 
     test_run_id = f"test_{uuid.uuid4().hex[:8]}"
     target_repo = "Dmitrii-Zavalin-Deployments/navier_stokes_solver"

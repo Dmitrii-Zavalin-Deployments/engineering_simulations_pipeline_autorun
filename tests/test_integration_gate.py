@@ -67,7 +67,7 @@ def test_system_tier_gap_resolution(tmp_path):
     state.hydrate_manifest(manifest)
     
     # 3. Verify Mechanism identifies the gap
-    gap = state.forensic_artifact_scan()
+    gap = state.forensic_artifact_scan()[0]
     assert gap is not None
     assert gap['name'] == "ProcessData"
     assert "input_sensor.bin" in gap['requires']
@@ -84,7 +84,7 @@ def test_system_tier_dispatch_mechanism(mock_post):
     Ensures the Dispatcher correctly formats the payload for the remote Repo.
     """
     # 1. Setup Mock Environment
-    os.environ["GITHUB_TOKEN"] = "nomadic_test_token"
+    os.environ["GH_PAT"] = "nomadic_test_token"
     
     # 2. Setup Success Response (HTTP 204 No Content is standard for GitHub Dispatches)
     mock_response = MagicMock()
@@ -140,5 +140,5 @@ def test_system_tier_saturation_silence(tmp_path):
     state.hydrate_manifest(manifest)
     
     # 2. Scan should return None (No gaps)
-    gap = state.forensic_artifact_scan()
+    gap = state.forensic_artifact_scan()[0]
     assert gap is None

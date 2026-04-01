@@ -17,7 +17,7 @@ class OrchestrationState:
     def __init__(self, config_path: str, data_root: str):
         self.data_path = Path(data_root)
         self.schema_path = Path("config/core_schema.json")
-        self.data_path.mkdir(parents=True, exist_ok=True)
+        if not self.data_path.exists(): self.data_path.mkdir(parents=True, exist_ok=True)
         
         try:
             with open(config_path, 'r', encoding="utf-8") as f:

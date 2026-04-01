@@ -46,7 +46,7 @@ def state_manager(tmp_path):
 def test_scenario_empty_folder(state_manager):
     """TABLE ROW 1: Empty Folder -> Trigger Initial Step."""
     logger.info("Running: TABLE ROW 1 (Empty Folder)")
-    target = state_manager.forensic_artifact_scan()
+    target = state_manager.forensic_artifact_scan()[0]
     assert target['name'] == "geometry_generator"
     assert target['target_repo'] == "org/geom-gen"
 
@@ -55,7 +55,7 @@ def test_scenario_geometry_present(state_manager):
     logger.info("Running: TABLE ROW 2 (Geometry Present)")
     (state_manager.data_path / "geometry.msh").write_text("mesh_data")
     
-    target = state_manager.forensic_artifact_scan()
+    target = state_manager.forensic_artifact_scan()[0]
     assert target['name'] == "navier_stokes_solver"
     assert target['target_repo'] == "org/ns-solver"
 
@@ -65,6 +65,6 @@ def test_scenario_results_present(state_manager):
     (state_manager.data_path / "geometry.msh").write_text("mesh_data")
     (state_manager.data_path / "results.zip").write_text("result_data")
     
-    target = state_manager.forensic_artifact_scan()
+    target = state_manager.forensic_artifact_scan()[0]
     assert target is None
     logger.info("✅ Saturation Verified: Engine stood down as expected.")
