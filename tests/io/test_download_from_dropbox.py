@@ -1,3 +1,6 @@
+# tests/io/test_download_from_dropbox.py
+
+from pathlib import Path
 import pytest
 import os
 from unittest.mock import patch, MagicMock
@@ -67,7 +70,7 @@ class TestCloudIngestor:
         
         # This triggers the internal pagination loop in CloudIngestor
         with patch("builtins.open", MagicMock()), patch("pathlib.Path.mkdir"):
-            ingestor.sync("/test", "./local", [".json"])
+            ingestor.sync("/test", Path("./local"), [".json"])
             
         assert mock_dbx.files_list_folder.called
         assert mock_dbx.files_list_folder_continue.called
