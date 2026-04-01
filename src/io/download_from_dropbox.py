@@ -12,7 +12,7 @@ Compliance:
 import os
 import logging
 from pathlib import Path
-from typing import List, Union, Any
+from typing import List, Union
 import dropbox
 from src.io.dropbox_utils import TokenManager
 
