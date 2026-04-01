@@ -45,11 +45,9 @@ class OrchestrationState:
         Rule: A 'corrupt disk' (Schema Violation) results in an immediate Hard-Halt.
         """
         try:
-            # 1. Load the "Law of the Disc" (Schema)
             with open(self.schema_path, 'r', encoding="utf-8") as s:
                 schema = json.load(s)
             
-            # 2. Structural Audit
             validate(instance=manifest_json, schema=schema)
             
             self.manifest_data = manifest_json
@@ -64,11 +62,9 @@ class OrchestrationState:
 
     def forensic_artifact_scan(self):
         """
-        IDEMPOTENCY CONTRACT:
-        Filesystem truth is absolute. Resumes by identifying the first
-        'Requirement' that lacks a 'Production' artifact.
-        
-        Agnostic Execution: The Engine is blind to physics, only checking existence.
+        THE GAP FINDER LOGIC (Sequential Truth):
+        Identifies the first step that has its 'Requires' met but its 'Produces' missing.
+        It is blind to physics, only verifying physical existence.
         """
         if not self.manifest_data:
             logger.critical("Engine logic breach. Scan attempted without Manifest Hydration.")
@@ -87,6 +83,11 @@ class OrchestrationState:
             if input_evidence and output_missing:
                 logger.info(f"🔍 Forensic Scan: Gate OPEN for step [{step['name']}]")
                 return step
+            
+            # If inputs are missing, the pipeline is blocked at this stage.
+            if not input_evidence:
+                logger.debug(f"Step [{step['name']}] blocked: Missing required input artifacts.")
+                break
         
         logger.info("✅ Forensic Scan: Pipeline saturated. No gaps detected.")
         return None

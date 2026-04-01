@@ -1,5 +1,6 @@
 # tests/test_forensic_logic.py
 
+import pytest
 import json
 import logging
 from src.core.state_engine import OrchestrationState
@@ -7,62 +8,63 @@ from src.core.state_engine import OrchestrationState
 # Standard logger setup for forensic tests
 logger = logging.getLogger(__name__)
 
-def test_forensic_gap_detection(tmp_path):
-    """Verifies engine triggers when output is missing."""
-    logger.info("Running: test_forensic_gap_detection")
-    
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
+@pytest.fixture
+def state_manager(tmp_path):
+    """Setup a mock environment with a 2-step manifest."""
     config = tmp_path / "active_disk.json"
-    config.write_text(json.dumps({"project_id": "test", "manifest_url": "http://x.com"}))
-
-    # Create requirement file (The Evidence)
-    input_file = data_dir / "input.npy"
-    input_file.write_text("data")
-    logger.debug(f"Mocked input artifact created at: {input_file}")
-
-    state = OrchestrationState(str(config), str(data_dir))
-    state.hydrate_manifest({
-        "manifest_id": "v1",
-        "pipeline_steps": [{
-            "name": "solve",
-            "target_repo": "org/repo",
-            "requires": ["input.npy"],
-            "produces": ["output.zip"]
-        }]
-    })
-
-    step = state.forensic_artifact_scan()
+    config.write_text(json.dumps({"project_id": "test_proj", "manifest_url": "http://mock.io"}))
     
-    assert step is not None
-    assert step['name'] == "solve"
-    logger.info("✅ Gap Detection Verified: Step 'solve' correctly identified as missing.")
-
-def test_forensic_saturation(tmp_path):
-    """Verifies engine stays idle when output exists."""
-    logger.info("Running: test_forensic_saturation")
+    # Mock Schema for hydration
+    schema_path = tmp_path / "config"
+    schema_path.mkdir()
+    (schema_path / "core_schema.json").write_text(json.dumps({"type": "object"}))
     
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    config = tmp_path / "active_disk.json"
-    config.write_text(json.dumps({"project_id": "test", "manifest_url": "http://x.com"}))
+    # Define the Table Scenario Pipeline
+    manifest = {
+        "manifest_id": "test_v1",
+        "pipeline_steps": [
+            {
+                "name": "geometry_generator",
+                "requires": [], # Initial step: no requirement
+                "produces": ["geometry.msh"],
+                "target_repo": "org/geom-gen"
+            },
+            {
+                "name": "navier_stokes_solver",
+                "requires": ["geometry.msh"],
+                "produces": ["results.zip"],
+                "target_repo": "org/ns-solver"
+            }
+        ]
+    }
+    
+    state = OrchestrationState(str(config), str(tmp_path / "data"))
+    state.schema_path = schema_path / "core_schema.json"
+    state.hydrate_manifest(manifest)
+    return state
 
-    # Create both files (Pipeline is Saturated)
-    (data_dir / "input.npy").write_text("x")
-    (data_dir / "output.zip").write_text("y")
-    logger.debug("Mocked environment saturated with both input and output artifacts.")
+def test_scenario_empty_folder(state_manager):
+    """TABLE ROW 1: Empty Folder -> Trigger Initial Step."""
+    logger.info("Running: TABLE ROW 1 (Empty Folder)")
+    target = state_manager.forensic_artifact_scan()
+    assert target['name'] == "geometry_generator"
+    assert target['target_repo'] == "org/geom-gen"
 
-    state = OrchestrationState(str(config), str(data_dir))
-    state.hydrate_manifest({
-        "manifest_id": "v1",
-        "pipeline_steps": [{
-            "name": "solve", 
-            "target_repo": "org/repo",
-            "requires": ["input.npy"], 
-            "produces": ["output.zip"]
-        }]
-    })
+def test_scenario_geometry_present(state_manager):
+    """TABLE ROW 2: geometry.msh present -> Trigger Physics Step."""
+    logger.info("Running: TABLE ROW 2 (Geometry Present)")
+    (state_manager.data_path / "geometry.msh").write_text("mesh_data")
+    
+    target = state_manager.forensic_artifact_scan()
+    assert target['name'] == "navier_stokes_solver"
+    assert target['target_repo'] == "org/ns-solver"
 
-    result = state.forensic_artifact_scan()
-    assert result is None
-    logger.info("✅ Saturation Verified: Engine correctly stood down.")
+def test_scenario_results_present(state_manager):
+    """TABLE ROW 3: results.zip present -> Halt (Cycle Complete)."""
+    logger.info("Running: TABLE ROW 3 (Results Present)")
+    (state_manager.data_path / "geometry.msh").write_text("mesh_data")
+    (state_manager.data_path / "results.zip").write_text("result_data")
+    
+    target = state_manager.forensic_artifact_scan()
+    assert target is None
+    logger.info("✅ Saturation Verified: Engine stood down as expected.")
