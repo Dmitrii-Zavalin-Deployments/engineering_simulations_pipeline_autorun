@@ -59,9 +59,11 @@ class TestCloudIngestor:
         mock_dbx.files_list_folder_continue.return_value = page2
 
         # Ingestor uses TokenManager + CloudIngestor
-        with patch("requests.post") as m: m.return_value.status_code=200; m.return_value.json.return_value={"access_token":"mock"}
-        tm = TokenManager("key", "secret")
-        ingestor = CloudIngestor(tm, "refresh", "test.log")
+        with patch("requests.post") as m:
+            m.return_value.status_code = 200
+            m.return_value.json.return_value = {"access_token": "mock"}
+            tm = TokenManager("key", "secret")
+            ingestor = CloudIngestor(tm, "refresh", "test.log")
         
         # This triggers the internal pagination loop in CloudIngestor
         with patch("builtins.open", MagicMock()), patch("pathlib.Path.mkdir"):

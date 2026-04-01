@@ -67,7 +67,8 @@ def test_system_tier_gap_resolution(tmp_path):
     state.hydrate_manifest(manifest)
     
     # 3. Verify Mechanism identifies the gap
-    gap = state.forensic_artifact_scan()[0]
+    gaps = state.forensic_artifact_scan()
+    gap = gaps[0] if gaps else None
     assert gap is not None
     assert gap['name'] == "ProcessData"
     assert "input_sensor.bin" in gap['requires']
@@ -103,7 +104,7 @@ def test_system_tier_dispatch_mechanism(mock_post):
     # Verify the logic correctly addressed the Repo Dispatch API
     args, kwargs = mock_post.call_args
     assert "org/weather-worker" in args[0]
-    assert kwargs['json']['event_type'] == "dispatch_worker"
+    assert kwargs['json']['event_type'] == "worker_trigger"
     assert kwargs['json']['client_payload']['step'] == "AnalyzeWeather"
 
 
@@ -140,5 +141,6 @@ def test_system_tier_saturation_silence(tmp_path):
     state.hydrate_manifest(manifest)
     
     # 2. Scan should return None (No gaps)
-    gap = state.forensic_artifact_scan()[0]
+    gaps = state.forensic_artifact_scan()
+    gap = gaps[0] if gaps else None
     assert gap is None

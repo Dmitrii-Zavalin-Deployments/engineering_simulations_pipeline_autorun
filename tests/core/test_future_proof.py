@@ -47,7 +47,8 @@ def test_dummy_disc_agnostic_execution(future_engine_setup):
     (future_engine_setup.data_path / "initial_seed.dat").write_text("010101")
     
     # 2. Trigger Scan
-    step = future_engine_setup.forensic_artifact_scan()[0]
+    steps = future_engine_setup.forensic_artifact_scan()
+    step = steps[0] if steps else None
     
     # 3. Verify the Engine identified the future step based on Logic alone
     assert step['name'] == "quantum_init"
@@ -64,7 +65,8 @@ def test_conflict_simulation_hard_halt(future_engine_setup):
     # No 'initial_seed.dat' exists.
     
     # 2. Trigger Scan
-    step = future_engine_setup.forensic_artifact_scan()[0]
+    steps = future_engine_setup.forensic_artifact_scan()
+    step = steps[0] if steps else None
     
     # 3. Verify Hard-Halt (No step should be triggered)
     assert step is None
