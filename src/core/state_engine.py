@@ -3,7 +3,7 @@
 import json
 import logging
 from pathlib import Path
-from jsonschema import validate, ValidationError
+from jsonschema import validate
 
 logger = logging.getLogger("Engine.State")
 

@@ -1,7 +1,6 @@
 # src/core/bootloader.py
 
 import os
-import json
 import requests
 import logging
 from pathlib import Path
