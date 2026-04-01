@@ -2,85 +2,58 @@
 
 import sys
 import logging
+from pathlib import Path
 from src.core.bootloader import Bootloader
 from src.api.github_trigger import Dispatcher
 from src.core.update_ledger import LedgerManager
 
-# Configure logging to ensure visibility during execution
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 def run_engine():
-    """
-    Sovereign Lifecycle: The Periodic Pulse.
-    Logic: Mount -> Hydrate -> Forensic Scan -> Dispatch -> Terminate.
-    """
     CONFIG_PATH = "config/active_disk.json"
     DATA_PATH = "data/testing-input-output/"
-    
-    # Initialize Ledger (The Performance Audit Bridge)
     ledger = LedgerManager()
 
-    # 1. Boot Sequence (Mounting & Hydration Gate)
+    # 1. Boot & Auto-Wake
     try:
-        # Transforming URL into a living state object via Bootloader
         state = Bootloader.mount(CONFIG_PATH, DATA_PATH)
         Bootloader.hydrate(state)
-        ledger.record_event("📥 HYDRATION", "Manifest successfully mounted from remote.")
+        ledger.record_event("📥 HYDRATION", "State successfully hydrated.")
     except Exception as e:
-        error_msg = f"Boot/Hydration Failed: {str(e)}"
-        ledger.record_event("❌ CRITICAL", error_msg)
-        logger.error(error_msg)
+        logger.error(f"Boot Failure: {e}")
         sys.exit(1)
 
-    # 2. Forensic Discovery (The Gate Check)
-    logger.debug("Starting forensic artifact scan...")
-    target_step = state.forensic_artifact_scan()
+    # 2. Forensic Scan
+    target_steps = state.forensic_artifact_scan()
     
-    if target_step:
-        ledger.log_scan(state.project_id, "GAP_DETECTED", gap=target_step['name'])
-        logger.info(f"🔍 Gap Detected: target step '{target_step['name']}' requires execution.")
-    else:
-        ledger.log_scan(state.project_id, "SATURATED")
-        logger.info("✅ State Saturated: No gaps found in artifacts. Mission complete.")
+    if not target_steps:
+        logger.info("✅ MISSION COMPLETE: Pipeline Saturated. Entering Dormancy.")
+        
+        # Create the dormancy flag
+        flag_path = Path("config/dormant.flag")
+        flag_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(flag_path, "w") as f:
+            f.write("STATE: SATURATED\nSTATUS: DORMANT")
+            
+        ledger.log_scan(state.project_id, "SATURATED_TERMINATED")
         return
 
-    # 3. Dispatch (The Command Link)
-    try:
-        dispatcher = Dispatcher()
-        
-        # Construct JSON Payload for the nomadic worker
+    # 3. Dispatch
+    logger.info(f"🔍 Gaps Detected: {len(target_steps)} tasks ready.")
+    dispatcher = Dispatcher()
+    
+    for step in target_steps:
         payload = {
             "project_id": state.project_id,
-            "manifest_id": state.manifest_data["manifest_id"],
-            "step": target_step['name'],
-            "requires": target_step['requires'],
-            "produces": target_step['produces']
+            "manifest_id": state.manifest_data.get("manifest_id"),
+            "step": step['name'],
+            "requires": step['requires'],
+            "produces": step['produces']
         }
         
-        logger.info(f"🚀 Dispatching payload to {target_step['target_repo']}...")
-        
-        success = dispatcher.trigger_worker(target_step['target_repo'], payload)
-        
-        if success:
-            ledger.log_dispatch(
-                state.project_id, 
-                state.manifest_data["manifest_id"], 
-                target_step['name'], 
-                target_step['target_repo']
-            )
-            logger.info(f"✅ Dispatch Successful: {target_step['name']}")
-        else:
-            logger.error(f"❌ Dispatch failed for step: {target_step['name']}")
-            sys.exit(1)
-            
-    except Exception as e:
-        ledger.record_event("❌ DISPATCH_ERROR", str(e))
-        logger.error(f"Dispatch Runtime Error: {e}")
-        sys.exit(1)
+        if dispatcher.trigger_worker(step['target_repo'], payload):
+            ledger.log_dispatch(state.project_id, "N/A", step['name'], step['target_repo'])
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     run_engine()

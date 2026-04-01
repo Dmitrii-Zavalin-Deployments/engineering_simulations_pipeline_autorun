@@ -5,15 +5,40 @@ on:
     branches:
       - "**"
   workflow_dispatch:
+  schedule:
+    - cron: '*/30 * * * *'
 
 jobs:
+  gatekeeper:
+    name: "🛑 Engine Gatekeeper"
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.check.outputs.status }}
+    steps:
+      - name: 🗂️ Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🔍 Check Dormancy Flag
+        id: check
+        run: |
+          # If it is a scheduled pulse AND the dormant flag exists, halt.
+          # Manual triggers and Pushes always proceed to allow for Auto-Wake.
+          if [[ "${{ github.event_name }}" == "schedule" ]] && [ -f "config/dormant.flag" ]; then
+            echo "status=dormant" >> $GITHUB_OUTPUT
+            echo "🛑 ENGINE DORMANT: Mission complete. Halting scheduled pulse."
+          else
+            echo "status=active" >> $GITHUB_OUTPUT
+            echo "🚀 ENGINE ACTIVE: Proceeding via ${{ github.event_name }}."
+          fi
+
   pre_flight_tests:
     name: "🧪 Pre-Flight: Logic & Hygiene"
+    needs: gatekeeper
+    if: needs.gatekeeper.outputs.status == 'active'
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: ${{ github.workspace }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      # Define the 'Gold Standard' test command here (e.g. # pytest -s tests/ -vv --cov=src --cov-report=term-missing)
       TEST_COMMAND: "pytest -s tests/ -vv --cov=src --cov-report=term-missing"
     
     steps:
@@ -33,12 +58,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: 🧹 Auto-Clean (Autoflake)
-        run: |
-          autoflake --in-place --recursive --remove-unused-variables --remove-all-unused-imports src tests
+        run: autoflake --in-place --recursive --remove-unused-variables --remove-all-unused-imports src tests
 
       - name: 🧹 Static Analysis & Lint (Ruff)
-        run: |
-          ruff check src tests --fix
+        run: ruff check src tests --fix
 
       - name: 🚀 Commit & Push Hygiene Changes
         if: always()
@@ -51,77 +74,35 @@ jobs:
           git add .
           if [ -n "$(git status --porcelain)" ]; then
             git commit -m "🧹 Auto-clean: structural hygiene [Engine]"
-            git push || echo "Push skipped: branch protected."
+            git push || echo "Push skipped."
           fi
 
       - name: 💀 Dead Code Audit (Vulture)
-        run: |
-          # Vulture exits with non-zero if dead code is found, triggering failure()
-          vulture src --min-confidence 70
+        run: vulture src --min-confidence 70
 
-      - name: 🧪 Quality Gate Check
-        if: failure()
-        run: |
-          echo "CRITICAL: Dead code detected in src/. Review the Vulture logs above."
-          echo "Rule 2 (Zero-Debt Mandate) violation: Delete unused code before merging."
-          exit 1
-       
       - name: 🧪 Run Logic & Scientific Verification
-        run: |
-          echo "🚀 Initiating: $TEST_COMMAND"
-          $TEST_COMMAND
+        run: $TEST_COMMAND
       
-      - name: 🔍 Forensic Audit
+      - name: 🔍 Forensic Audit & Reset
         if: always()
-        run: |
-          if [[ "${{ job.status }}" == "success" ]]; then
-            echo "✅ All systems nominal. No anomalies detected in solver lifecycle."
-            cat <<EOF > src/debug/forensic_audit.sh
-          #!/bin/bash
-          # Description: Automated forensic audit for Navier-Stokes solver failures.
-          # Status: Dormant (All systems nominal)
-          exit 0
-          EOF
-            chmod +x src/debug/forensic_audit.sh
-            echo "🧹 Diagnostic script has been reset to Dormant mode."
-          else
-            echo "⚠️ CI Failure Detected. Initiating Deep Forensic Audit..."
-            echo "============================================================"
-            echo "ls -R output:"
-            ls -R
-            echo "============================================================"
-            echo "src/debug/forensic_audit.sh run results:"
-            if [ -f "src/debug/forensic_audit.sh" ]; then
-              bash src/debug/forensic_audit.sh
-            else
-              echo "❌ Critical: Diagnostic script 'src/debug/forensic_audit.sh' not found."
-            fi
-            echo "============================================================"
-            echo "📉 RE-RUNNING FAILED TEST FOR FINAL SIGNAL"
-            $TEST_COMMAND || true
-            exit 1
-          fi
-      
-      - name: 🧹 Sync Forensic Reset
-        # This only runs if the '🔍 Forensic Audit' step and tests passed
-        if: success()
         env:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         run: |
-          # 1. Setup Identity
-          git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
-          git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
-
-          # 2. Ensure the file is staged (The '🔍 Forensic Audit' step already created it)
-          git add src/debug/forensic_audit.sh
-          
-          # 3. Commit and Push ONLY the Forensic Reset
-          if [ -n "$(git status --porcelain src/debug/forensic_audit.sh)" ]; then
-            git commit -m "🧹 forensic: reset diagnostic script to dormant [PASS]"
-            git push origin HEAD || echo "Push skipped: Concurrent push detected."
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "✅ Systems nominal."
+            cat <<EOF > src/debug/forensic_audit.sh
+          #!/bin/bash
+          exit 0
+          EOF
+            chmod +x src/debug/forensic_audit.sh
+            git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
+            git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
+            git add src/debug/forensic_audit.sh
+            [ -n "$(git status --porcelain)" ] && git commit -m "🧹 forensic: reset" && git push
           else
-            echo "✅ Forensic script already in dormant mode. No sync needed."
+            echo "⚠️ CI Failure."
+            exit 1
           fi
 
   production_run:
@@ -130,11 +111,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: ${{ github.workspace }}
-      # Secrets for both Dropbox (Artifacts) and GitHub (Dispatching)
       DROPBOX_APP_KEY: ${{ secrets.APP_KEY }}
       DROPBOX_APP_SECRET: ${{ secrets.APP_SECRET }}
       DROPBOX_REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
-      GH_PAT: ${{ secrets.GH_PAT }} # Personal Access Token to trigger other repos
+      GH_PAT: ${{ secrets.GH_PAT }}
     
     steps:
       - name: 🗂️ Checkout Engine
@@ -148,34 +128,15 @@ jobs:
       - name: 📦 Install Dependencies
         run: pip install -r requirements.txt
 
-      - name: 🗂️ Pre-Download Repository State
-        run: |
-          ls -R
-
       # - name: 📥 Synchronize Input (Dropbox)
       #   run: |
-      #     # Ensure execution permissions for the ingestion script
       #     chmod +x src/download_from_dropbox.sh
       #     ./src/download_from_dropbox.sh
-          
-      #     echo "--- testing-input-output folder content:---"
-      #     # FIX: Removed the leading slash. Path is relative to the repository root.
-      #     ls -R data/testing-input-output/
 
       # - name: ⚡ Execute Sovereign Logic Gate
-      #   run: |
-      #     # 1. Hydrate OrchestrationState from config/active_disk.json
-      #     # 2. Perform Forensic Scan of data/
-      #     # 3. Identify the 'Gap' and Dispatch Worker via GitHub API
-      #     python3 src/main_engine.py
+      #   run: python3 src/main_engine.py
 
-      # - name: 📤 Synchronize State (Dropbox)
-      #   if: always()
-      #   run: |
-      #     chmod +x src/io/upload_to_dropbox.sh
-      #     ./src/io/upload_to_dropbox.sh
-
-      # - name: 📊 Update Performance Audit Ledger
+      # - name: 📊 Sync Audit & Dormancy State
       #   if: always()
       #   env:
       #     GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
@@ -183,15 +144,8 @@ jobs:
       #   run: |
       #     git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
       #     git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
-          
-      #     git reset --hard HEAD
-      #     git pull origin HEAD --rebase
-
-      #     # Logic to prepend the ledger with the result of the Forensic Scan
-      #     python3 src/core/update_ledger.py "${{ job.status }}"
-
-      #     git add performance_audit.md
-      #     if [ -n "$(git status --porcelain performance_audit.md)" ]; then
-      #       git commit -m "📊 audit: [${{ job.status }}] engine cycle complete"
+      #     git add performance_audit.md config/dormant.flag
+      #     if [ -n "$(git status --porcelain)" ]; then
+      #       git commit -m "📊 audit: cycle complete [${{ job.status }}]"
       #       git push origin HEAD
       #     fi

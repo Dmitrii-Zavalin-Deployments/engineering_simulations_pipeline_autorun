@@ -1,8 +1,10 @@
 # src/core/bootloader.py
 
+import os
 import json
 import requests
 import logging
+from pathlib import Path
 from src.core.state_engine import OrchestrationState
 
 logger = logging.getLogger("Engine.Bootloader")
@@ -16,30 +18,33 @@ class Bootloader:
     
     @staticmethod
     def mount(config_path: str, data_path: str) -> OrchestrationState:
-        """Initializes the state object using local configuration."""
-        logger.info(f"🛰️ Mounting Engine Foundation from: {config_path}")
+        """
+        Mounting Protocol with Auto-Wake Logic.
+        Rule: If the config file is newer than the dormancy flag, wake up.
+        """
+        config_file = Path(config_path)
+        dormant_flag = Path("config/dormant.flag")
+
+        if dormant_flag.exists() and config_file.exists():
+            if config_file.stat().st_mtime > dormant_flag.stat().st_mtime:
+                logger.info("🌅 New Configuration detected. Deleting dormancy flag.")
+                try:
+                    os.remove(dormant_flag)
+                except OSError as e:
+                    logger.error(f"Failed to remove dormancy flag: {e}")
+        
+        logger.info(f"🛰️ Mounting Engine Foundation: {config_path}")
         return OrchestrationState(config_path, data_path)
 
     @staticmethod
     def hydrate(state: OrchestrationState):
-        """
-        Remote Manifest Ingestion:
-        Fetches the raw JSON from state.manifest_url and hydrates the registry.
-        """
+        """Fetches the remote manifest and hydrates the OrchestrationState."""
         try:
             logger.info(f"🌐 Fetching Remote Manifest: {state.manifest_url}")
             response = requests.get(state.manifest_url, timeout=15)
             response.raise_for_status()
-            
-            manifest_data = response.json()
-            
-            # The 'Hydration Gate' - Structural validation happens inside state_engine
-            state.hydrate_manifest(manifest_data)
+            state.hydrate_manifest(response.json())
             logger.info(f"✅ Boot Sequence Complete: [{state.project_id}] Hydrated.")
-            
-        except requests.exceptions.RequestException as e:
-            logger.critical(f"Hydration Failed: Connection Error. {e}")
-            raise RuntimeError(f"❌ CRITICAL: Could not reach manifest URL. {e}")
-        except json.JSONDecodeError:
-            logger.critical("Hydration Failed: Remote manifest is not valid JSON.")
-            raise RuntimeError("❌ CRITICAL: Remote manifest corrupted.")
+        except Exception as e:
+            logger.critical(f"Hydration Failed: {e}")
+            raise RuntimeError(f"❌ CRITICAL: Hydration failure. {e}")
