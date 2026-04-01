@@ -21,7 +21,6 @@ class Dispatcher:
 
     def __init__(self):
         # Phase C: Rule 4 - Zero-Default Policy (Explicit or Error)
-        # Standardized to GITHUB_TOKEN for nomadic environment compatibility
         self.token = os.getenv("GITHUB_TOKEN")
         if not self.token:
             logger.critical("GITHUB_TOKEN not found in environment. Access Denied.")
@@ -36,7 +35,7 @@ class Dispatcher:
     def trigger_worker(self, target_repo: str, payload: Dict[str, Any]) -> bool:
         """
         Sends a Repository Dispatch signal to the worker.
-        Enforces the 'Periodic Pulse' by initiating and terminating.
+        Target: https://api.github.com/repos/{target_repo}/dispatches
         """
         url = f"https://api.github.com/repos/{target_repo}/dispatches"
         
@@ -51,15 +50,16 @@ class Dispatcher:
 
         try:
             # Phase C: Rule 1 - Resource Protection (Timeout enforced)
-            response = requests.post(url, json=data, headers=self.headers, timeout=10)
+            response = requests.post(url, json=data, headers=self.headers, timeout=15)
             
+            # GitHub returns 204 No Content on successful dispatch
             if response.status_code == 204:
                 logger.info(f"🚀 Signal Accepted: {target_repo} activation confirmed.")
                 return True
             
-            logger.error(f"Dispatch Failed [{response.status_code}]: {response.text}")
+            logger.error(f"❌ Handshake Refused: HTTP {response.status_code} - {response.text}")
             return False
                 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Connection Error during Dispatch to {target_repo}: {e}")
+            logger.error(f"❌ Connection Error during Dispatch to {target_repo}: {e}")
             return False

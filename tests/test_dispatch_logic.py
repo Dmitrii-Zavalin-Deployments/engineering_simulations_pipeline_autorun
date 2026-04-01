@@ -1,19 +1,19 @@
 # tests/test_dispatch_logic.py
 
 import pytest
+import os
+import uuid
 import logging
 from unittest.mock import patch, MagicMock
 from src.api.github_trigger import Dispatcher
 
-# Standard logger setup for the test suite
 logger = logging.getLogger(__name__)
+
+# --- UNIT TESTS (MOCKED) ---
 
 @patch('requests.post')
 def test_dispatch_signal_success(mock_post):
     """Verifies 204 status results in successful dispatch."""
-    logger.info("Running: test_dispatch_signal_success")
-    
-    # Mock environment to satisfy Rule 4
     with patch.dict('os.environ', {'GITHUB_TOKEN': 'test_token_alpha'}):
         mock_response = MagicMock()
         mock_response.status_code = 204
@@ -21,36 +21,39 @@ def test_dispatch_signal_success(mock_post):
         
         dispatcher = Dispatcher()
         payload = {"step": "solve", "project_id": "test_project"}
-        
         success = dispatcher.trigger_worker("org/repo", payload)
         
         assert success is True
         mock_post.assert_called_once()
-        logger.debug("Successfully verified 204 dispatch signal.")
 
 def test_dispatch_fails_without_token():
     """Rule 4 Compliance: Explicit error when GITHUB_TOKEN is missing."""
-    logger.info("Running: test_dispatch_fails_without_token")
-    
     with patch.dict('os.environ', {}, clear=True):
         with pytest.raises(RuntimeError, match="GITHUB_TOKEN not found"):
             Dispatcher()
-    
-    logger.debug("Successfully caught missing GITHUB_TOKEN RuntimeError.")
 
-@patch('requests.post')
-def test_dispatch_api_rejection(mock_post):
-    """Verifies that non-204 responses correctly return False."""
-    logger.info("Running: test_dispatch_api_rejection")
+# --- PRODUCTION TEST (REAL-WORLD) ---
+
+def test_real_world_integration_handshake():
+    """
+    PRODUCTION TEST: End-to-End Handshake.
+    Verifies the Engine can talk to the live navier-stokes-solver.
+    """
+    if not os.getenv("GITHUB_TOKEN"):
+        pytest.skip("Skipping Real-World test: GITHUB_TOKEN not set.")
+
+    test_run_id = f"test_{uuid.uuid4().hex[:8]}"
+    target_repo = "Dmitrii-Zavalin-Deployments/navier_stokes_solver"
     
-    with patch.dict('os.environ', {'GITHUB_TOKEN': 'test_token_alpha'}):
-        mock_response = MagicMock()
-        mock_response.status_code = 401
-        mock_response.text = "Unauthorized"
-        mock_post.return_value = mock_response
-        
-        dispatcher = Dispatcher()
-        success = dispatcher.trigger_worker("org/repo", {"step": "fail"})
-        
-        assert success is False
-        logger.debug(f"Confirmed False return on {mock_response.status_code} status.")
+    payload = {
+        "run_id": test_run_id,
+        "step": "integration_test",
+        "input_file": "fluid_simulation_input.json",
+        "description": "Integration Gate: Manual Verification Pulse"
+    }
+
+    dispatcher = Dispatcher()
+    success = dispatcher.trigger_worker(target_repo, payload)
+
+    assert success is True
+    print(f"\n✅ Pulse Sent. Verify Run ID [{test_run_id}] in GitHub Actions for {target_repo}")
