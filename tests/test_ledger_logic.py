@@ -1,48 +1,44 @@
 # tests/test_ledger_logic.py
 
+import pytest
 import logging
+import os
 from src.core.update_ledger import LedgerManager
 
-# Standard logger setup for ledger logic
 logger = logging.getLogger(__name__)
 
 def test_ledger_prepend_order(tmp_path):
-    """Verifies that the ledger follows the 'Newest First' rule."""
-    logger.info("Running: test_ledger_prepend_order")
-    
+    """Verifies that the ledger follows the 'Newest First' rule for nomadic monitoring."""
     log_file = tmp_path / "performance_audit.md"
     ledger = LedgerManager(log_path=str(log_file))
 
-    # Record two events
-    logger.debug("Recording FIRST event...")
-    ledger.record_event("FIRST", "This should be at the bottom")
-    
-    logger.debug("Recording SECOND event...")
-    ledger.record_event("SECOND", "This should be at the top")
+    # Record sequence
+    ledger.record_event("FIRST", "Bottom entry")
+    ledger.record_event("SECOND", "Top entry")
 
-    with open(log_file, "r") as f:
+    with open(log_file, "r", encoding="utf-8") as f:
         content = f.read()
         
-    # Check that SECOND appears before FIRST (Prepend logic)
-    first_idx = content.find("FIRST")
-    second_idx = content.find("SECOND")
-    
-    assert second_idx < first_idx
-    logger.info(f"✅ Ledger Prepend Verified: SECOND (idx {second_idx}) is before FIRST (idx {first_idx}).")
+    assert content.find("SECOND") < content.find("FIRST")
+    logger.info("✅ Prepend Order Verified: Newest pulses are at the top.")
 
-def test_ledger_mapping_logic(tmp_path):
-    """Verifies standardized dispatch logging format."""
-    logger.info("Running: test_ledger_mapping_logic")
-    
+def test_audit_consistency_sequence(tmp_path):
+    """VERIFICATION: A run must reflect the full SCAN -> DISPATCH sequence."""
     log_file = tmp_path / "performance_audit.md"
     ledger = LedgerManager(log_path=str(log_file))
     
-    logger.debug("Logging dispatch event for p1/m1...")
-    ledger.log_dispatch("p1", "m1", "solve", "org/repo")
+    project = "navier_stokes_alpha_01"
     
-    with open(log_file, "r") as f:
+    # 1. SCAN phase
+    ledger.log_scan(project, "GAP_DETECTED", gap="navier_stokes_solver")
+    
+    # 2. DISPATCH phase
+    ledger.log_dispatch(project, "m1_stable", "navier_stokes_solver", "org/repo")
+    
+    with open(log_file, "r", encoding="utf-8") as f:
         content = f.read()
-        
+    
+    assert "🔍 FORENSIC_SCAN" in content
     assert "🚀 DISPATCH" in content
-    assert "org/repo" in content
-    logger.info("✅ Dispatch Mapping Verified: Markdown string contains expected metadata.")
+    assert "navier_stokes_solver" in content
+    logger.info("✅ Audit Traceability Verified: Full sequence is intact.")

@@ -15,7 +15,7 @@ class LedgerManager:
     """
     The Traceability Bridge (Performance Audit Ledger).
     Phase C Compliance: Rule 0 (__slots__) & Rule 5 (Performance Logging).
-    Optimization: Platinum-grade deterministic error handling.
+    Optimization: Platinum-grade deterministic error handling & Atomic Prepending.
     """
     __slots__ = ['log_path']
 
@@ -25,7 +25,7 @@ class LedgerManager:
     def record_event(self, category: str, message: str, metadata: dict = None):
         """
         Prepends a structured entry to the ledger.
-        Format: [Timestamp UTC] [Category] Message | Metadata
+        Ensures the 'Pulse' history remains chronological (Newest First).
         """
         # Using UTC for nomadic synchronization consistency
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -42,7 +42,6 @@ class LedgerManager:
                     # Remove header from old content to avoid duplication during prepend
                     existing_content = current_text.replace(header, "")
             except (FileNotFoundError, IOError) as e:
-                # Platinum Compliance: Deterministic error catching vs blanket Exception
                 logger.warning(f"Ledger Read Warning: {e}. Starting fresh buffer.")
                 existing_content = ""
 
@@ -53,29 +52,28 @@ class LedgerManager:
         except IOError as e:
             logger.error(f"Critical Ledger Write Failure: {e}")
 
+    def log_scan(self, project_id: str, status: str, gap: str = "NONE"):
+        """Standardized mapping for Forensic Scan results (The IDENTIFY phase)."""
+        msg = f"Forensic Scan Result: {status}"
+        if gap != "NONE":
+            msg += f" | Target Step Found: {gap}"
+        
+        logger.info(f"🔍 Forensic Scan [{project_id}]: {status}")
+        self.record_event(
+            category="🔍 FORENSIC_SCAN",
+            message=msg,
+            metadata={"project_id": project_id, "gap_identified": gap}
+        )
+
     def log_dispatch(self, project_id: str, manifest_id: str, step_name: str, target_repo: str):
-        """Standardized mapping for Dispatch events."""
+        """Standardized mapping for Dispatch events (The DISPATCH phase)."""
         logger.info(f"🚀 Dispatching Worker: {step_name} -> {target_repo}")
         self.record_event(
             category="🚀 DISPATCH",
-            message=f"Worker activated for step: {step_name}",
+            message=f"Command Link Handshake Confirmed for step: {step_name}",
             metadata={
                 "project_id": project_id,
                 "manifest_id": manifest_id,
                 "target": target_repo
             }
-        )
-
-    def log_scan(self, project_id: str, status: str, gap: str = None):
-        """Standardized mapping for Forensic Scan results."""
-        msg = f"Scan Result: {status}"
-        if gap:
-            msg += f" | Gap detected at: {gap}"
-        
-        logger.info(f"🔍 Forensic Scan [{project_id}]: {status}")
-        
-        self.record_event(
-            category="🔍 FORENSIC_SCAN",
-            message=msg,
-            metadata={"project_id": project_id}
         )
