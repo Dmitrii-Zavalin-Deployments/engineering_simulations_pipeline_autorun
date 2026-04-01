@@ -1,7 +1,6 @@
 # tests/architecture/test_deterministic_init.py
 
 import ast
-import os
 import pytest
 from pathlib import Path
 
