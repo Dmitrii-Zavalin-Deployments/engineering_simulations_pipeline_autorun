@@ -24,6 +24,7 @@ def run_engine():
     """
     CONFIG_PATH = "config/active_disk.json"
     DATA_PATH = "data/testing-input-output/"
+    FLAG_PATH = Path("config/dormant.flag")
     
     # Rule 0 & 4: Instantiate Ledger with zero-default path logic
     ledger = LedgerManager(log_path="performance_audit.md")
@@ -31,6 +32,7 @@ def run_engine():
     # 1. Boot & Auto-Wake
     try:
         # Rule 1: Environmental hydration from the 'Foundation' (Disk)
+        # Bootloader.mount now handles time-based auto-wake via active_disk.json
         state = Bootloader.mount(CONFIG_PATH, DATA_PATH)
         Bootloader.hydrate(state)
         ledger.record_event("📥 HYDRATION", "State successfully hydrated from Foundation.")
@@ -46,11 +48,10 @@ def run_engine():
     if not target_steps:
         logger.info("✅ MISSION COMPLETE: Pipeline Saturated. Entering Dormancy.")
         
-        # Rule 5: Generate Dormancy Flag for the Gatekeeper
-        flag_path = Path("config/dormant.flag")
-        flag_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(flag_path, "w", encoding="utf-8") as f:
-            f.write("STATE: SATURATED\nSTATUS: DORMANT")
+        # Rule 5: Generate Dormancy Flag for the Gatekeeper (Simplified STATUS)
+        FLAG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(FLAG_PATH, "w", encoding="utf-8") as f:
+            f.write("STATUS: DORMANT")
             
         ledger.log_scan(
             project_id=state.project_id, 
@@ -59,13 +60,17 @@ def run_engine():
         )
         return
 
-    # 3. Dispatch (The TRIGGER phase)
+    # 3. Active State Affirmation
+    # If we have work to do, ensure the flag reflects ACTIVE status
+    if FLAG_PATH.exists():
+        FLAG_PATH.write_text("STATUS: ACTIVE", encoding="utf-8")
+
+    # 4. Dispatch (The TRIGGER phase)
     logger.info(f"🔍 Gaps Detected: {len(target_steps)} tasks ready.")
     dispatcher = Dispatcher()
     
     for step in target_steps:
-        # Rule 4 Violation Correction: Replaced .get() with direct key access.
-        # This ensures the Engine crashes if the manifest is corrupt/incomplete.
+        # Rule 4 Violation Correction: Direct key access ensures crash on data integrity failure.
         try:
             manifest_id = state.manifest_data["manifest_id"]
             
