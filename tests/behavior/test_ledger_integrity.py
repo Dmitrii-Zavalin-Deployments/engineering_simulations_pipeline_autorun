@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 
 # Assuming your core ledger/audit modules
-from src.core.ledger import LedgerManager
+from src.core.update_ledger import LedgerManager
 from src.core.audit import AuditLogger
 
 @pytest.fixture
