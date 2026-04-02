@@ -31,10 +31,8 @@ def test_audit_consistency_sequence(tmp_path):
     ledger.log_scan(project, "GAP_DETECTED", gap="navier_stokes_solver")
     
     # 2. DISPATCH phase
-    # tests/core/test_ledger_logic.py (Line 34)
 
-# Replace the failing call with:
-ledger.log_dispatch(project, "m1_stable", "navier_stokes_solver", "org/repo", 6))
+    ledger.log_dispatch(project, "m1_stable", "navier_stokes_solver", "org/repo", 6)
     
     with open(log_file, "r", encoding="utf-8") as f:
         content = f.read()
