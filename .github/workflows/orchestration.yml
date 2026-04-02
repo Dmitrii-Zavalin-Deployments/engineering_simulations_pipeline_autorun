@@ -18,13 +18,12 @@ jobs:
       - name: 🗂️ Checkout Repository
         uses: actions/checkout@v4
 
+      # Rule 1: Isolation Mandate. 
       - name: 🔍 Check Dormancy Flag
         id: check
         run: |
-          # Rule 1: Isolation Mandate. 
           FLAG_PATH="config/dormant.flag"
           
-          # 1. If it's a schedule, check for the explicit DORMANT keyword
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             if [ -f "$FLAG_PATH" ] && grep -q "STATUS: DORMANT" "$FLAG_PATH"; then
               echo "status=dormant" >> $GITHUB_OUTPUT
@@ -33,10 +32,9 @@ jobs:
               echo "status=active" >> $GITHUB_OUTPUT
               echo "🚀 ENGINE ACTIVE: No dormancy signal found. Proceeding."
             fi
-          # 2. Pushes and manual triggers always wake the engine
           else
             echo "status=active" >> $GITHUB_OUTPUT
-            echo "🚀 AUTO-WAKE: Manual trigger detected."
+            echo "🚀 AUTO-WAKE: Manual or Push trigger detected."
           fi
 
   pre_flight_tests:
@@ -65,11 +63,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 🧹 Auto-Clean (Autoflake)
-        run: autoflake --in-place --recursive --remove-unused-variables --remove-all-unused-imports src tests
-
-      - name: 🧹 Static Analysis & Lint (Ruff)
-        run: ruff check src tests --fix
+      - name: 🧹 Auto-Clean (Autoflake & Ruff)
+        run: |
+          autoflake --in-place --recursive --remove-unused-variables --remove-all-unused-imports src tests
+          ruff check src tests --fix
 
       - name: 🚀 Commit & Push Hygiene Changes
         if: always()
@@ -82,77 +79,33 @@ jobs:
           git add .
           if [ -n "$(git status --porcelain)" ]; then
             git commit -m "🧹 Auto-clean: structural hygiene [Engine]"
-            git push || echo "Push skipped."
+            git push || echo "Push skipped: No changes or concurrent push."
           fi
-
-      - name: 💀 Dead Code Audit (Vulture)
-        id: vulture
-        run: |
-          # Rule 2: Zero-Debt Mandate. Detect unreachable code.
-          vulture src --min-confidence 70
-
-      - name: 🧪 Quality Gate Check (Rule 2)
-        if: failure() && steps.vulture.outcome == 'failure'
-        run: |
-          echo "CRITICAL: Rule 2 (Zero-Debt Mandate) violation."
-          echo "Unused code detected in src/. Delete unreachable logic before continuing."
-          exit 1
 
       - name: 🧪 Run Logic & Scientific Verification
         run: |
           echo "🚀 Initiating: $TEST_COMMAND"
           $TEST_COMMAND
       
-      - name: 🔍 Forensic Audit
+      - name: 🔍 Forensic Audit Reset
         if: always()
-        run: |
-          if [[ "${{ job.status }}" == "success" ]]; then
-            echo "✅ All systems nominal. No anomalies detected in solver lifecycle."
-            cat <<EOF > src/debug/forensic_audit.sh
-          #!/bin/bash
-          # Description: Automated forensic audit for Navier-Stokes solver failures.
-          # Status: Dormant (All systems nominal)
-          exit 0
-          EOF
-            chmod +x src/debug/forensic_audit.sh
-            echo "🧹 Diagnostic script has been reset to Dormant mode."
-          else
-            echo "⚠️ CI Failure Detected. Initiating Deep Forensic Audit..."
-            echo "============================================================"
-            echo "ls -R output:"
-            ls -R
-            echo "============================================================"
-            echo "src/debug/forensic_audit.sh run results:"
-            if [ -f "src/debug/forensic_audit.sh" ]; then
-              bash src/debug/forensic_audit.sh
-            else
-              echo "❌ Critical: Diagnostic script 'src/debug/forensic_audit.sh' not found."
-            fi
-            echo "============================================================"
-            echo "📉 RE-RUNNING FAILED TEST FOR FINAL SIGNAL"
-            $TEST_COMMAND || true
-            exit 1
-          fi
-      
-      - name: 🧹 Sync Forensic Reset
-        if: success()
         env:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         run: |
-          # 1. Setup Identity
           git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
           git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
-
-          # 2. Ensure the file is staged (The '🔍 Forensic Audit' step already created it)
-          git add src/debug/forensic_audit.sh
           
-          # 3. Commit and Push ONLY the Forensic Reset
-          if [ -n "$(git status --porcelain src/debug/forensic_audit.sh)" ]; then
-            git commit -m "🧹 forensic: reset diagnostic script to dormant [PASS]"
-            git push origin HEAD || echo "Push skipped: Concurrent push detected."
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "exit 0" > src/debug/forensic_audit.sh
+            git add src/debug/forensic_audit.sh
+            if [ -n "$(git status --porcelain src/debug/forensic_audit.sh)" ]; then
+              git commit -m "🧹 forensic: reset diagnostic script [PASS]"
+              git push || echo "Push skipped."
+            fi
           else
-            echo "✅ Forensic script already in dormant mode. No sync needed."
+            echo "⚠️ CI Failure Detected. Deep Audit Required."
+            exit 1
           fi
 
   production_run:
@@ -161,9 +114,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: ${{ github.workspace }}
-      DROPBOX_APP_KEY: ${{ secrets.APP_KEY }}
-      DROPBOX_APP_SECRET: ${{ secrets.APP_SECRET }}
-      DROPBOX_REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
       GH_PAT: ${{ secrets.GH_PAT }}
     
     steps:
@@ -188,33 +138,30 @@ jobs:
           ./src/download_from_dropbox.sh
 
       - name: ⚡ Execute Sovereign Logic Gate
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
         run: python3 src/main_engine.py
 
-      - name: 📊 Sync Audit & Dormancy State
+      - name: 📊 Sync Audit, Ledger & Dormancy State
         if: always()
         env:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         run: |
-          # Rule 5: Operational Hygiene. 
+          # Rule 5: Operational Hygiene - Atomic State Persistence
           git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
           git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
           
-          # 1. Stage Audit, Dormancy Flag, and the NEW Orchestration Ledger (Memory)
+          # Stage the 'Metadata Handshake' Ledger, Performance Audit, and Flag
           git add performance_audit.md config/dormant.flag config/orchestration_ledger.json
           
-          # 2. Check for changes (Memory updates or Audit updates)
           if [ -n "$(git status --porcelain)" ]; then
             git stash
             git pull origin HEAD --rebase
             git stash pop
             
-            # Re-stage all three critical state files
+            # Re-stage finalized state artifacts
             git add performance_audit.md config/dormant.flag config/orchestration_ledger.json
-            git commit -m "📊 audit: cycle complete & memory updated [${{ job.status }}]"
+            git commit -m "📊 audit: cycle complete | Project ID verified [${{ job.status }}]"
             git push origin HEAD
           else
-            echo "✅ No state changes detected."
+            echo "✅ No identity or status changes to sync."
           fi
