@@ -8,7 +8,6 @@ from jsonschema import ValidationError
 from src.core.bootloader import Bootloader
 
 # Assuming your source is in the python path
-from src.core.bootloader import Bootloader
 from src.core.state_engine import OrchestrationState
 
 @pytest.fixture

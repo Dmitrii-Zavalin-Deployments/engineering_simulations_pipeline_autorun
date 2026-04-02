@@ -63,6 +63,6 @@ def test_scenario_blocked_step(mock_env):
         engine = OrchestrationState(mock_env["config"], mock_env["data"])
         engine.hydrate_manifest(mock_env["manifest"])
     
-    ledger = {"step_1": {"status": "COMPLETED"}}
+    ledger = {"step_1": {"status": "COMPLETED", "timeout_hours": 6, "last_triggered": "2026-01-01T00:00:00+00:00"}}
     # f1.out is MISSING physically -> step_2 cannot run
     assert engine.forensic_artifact_scan(ledger) is None

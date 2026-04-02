@@ -156,7 +156,7 @@ def test_identity_preservation_same_ids(nomadic_env):
     # 1. Setup a ledger with an active job
     initial_ledger = {
         "metadata": {"project_id": "alpha_01", "manifest_id": "man_01"},
-        "steps": {"navier_stokes": {"status": "IN_PROGRESS", "timeout_hours": 6}}
+        "metadata": {"project_id": "alpha_01", "manifest_id": "man_01"}, "steps": {"navier_stokes": {"status": "IN_PROGRESS", "timeout_hours": 6}}
     }
     ledger_path.write_text(json.dumps(initial_ledger))
 
@@ -168,7 +168,7 @@ def test_identity_preservation_same_ids(nomadic_env):
     }
 
     # 3. Trigger hydration
-    state = OrchestrationState(nomadic_env["config"], nomadic_env["root"])
+    state = OrchestrationState(str(ledger_path.parent / 'active_disk.json'), nomadic_env["root"])
     state.manifest_url = "http://mock.io"
     
     with patch("requests.get") as mock_get:
@@ -208,7 +208,7 @@ def test_identity_mismatch_reset(nomadic_env, remote_pid, remote_mid, scenario_n
         "pipeline_steps": []
     }
 
-    state = OrchestrationState(nomadic_env["config"], nomadic_env["root"])
+    state = OrchestrationState(str(ledger_path.parent / 'active_disk.json'), nomadic_env["root"])
     state.manifest_url = "http://mock.io"
 
     # 3. Trigger hydration (which triggers the Bootloader integrity check)
