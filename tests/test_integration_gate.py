@@ -67,7 +67,7 @@ def test_system_tier_gap_resolution(tmp_path):
     state.hydrate_manifest(manifest)
     
     # 3. Verify Mechanism identifies the gap
-    gaps = state.forensic_artifact_scan()
+    gaps = state.forensic_artifact_scan({})
     gap = gaps[0] if gaps else None
     assert gap is not None
     assert gap['name'] == "ProcessData"
@@ -141,6 +141,6 @@ def test_system_tier_saturation_silence(tmp_path):
     state.hydrate_manifest(manifest)
     
     # 2. Scan should return None (No gaps)
-    gaps = state.forensic_artifact_scan()
+    gaps = state.forensic_artifact_scan({})
     gap = gaps[0] if gaps else None
     assert gap is None

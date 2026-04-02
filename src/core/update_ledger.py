@@ -85,8 +85,9 @@ class LedgerManager:
         state[job_name] = {
             "status": status,
             "last_triggered": datetime.now(timezone.utc).isoformat(),
-            "timeout_hours": metadata.get("timeout_hours", 6),
-            "target_repo": metadata.get("target")
+            # Rule 4: Mandatory keys. No fallbacks allowed.
+            "timeout_hours": metadata["timeout_hours"],
+            "target_repo": metadata["target"]
         }
 
         try:
