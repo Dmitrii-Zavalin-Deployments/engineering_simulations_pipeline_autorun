@@ -135,7 +135,6 @@ jobs:
           fi
       
       - name: 🧹 Sync Forensic Reset
-        # This only runs if the '🔍 Forensic Audit' step and tests passed
         if: success()
         env:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
@@ -203,24 +202,19 @@ jobs:
           git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
           git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
           
-          # 1. Stage everything currently modified
-          git add performance_audit.md config/dormant.flag
+          # 1. Stage Audit, Dormancy Flag, and the NEW Orchestration Ledger (Memory)
+          git add performance_audit.md config/dormant.flag config/orchestration_ledger.json
           
-          # 2. Check if there is actually anything to commit
+          # 2. Check for changes (Memory updates or Audit updates)
           if [ -n "$(git status --porcelain)" ]; then
-            # 3. Temporarily stash changes so we can pull cleanly
             git stash
-            
-            # 4. Pull latest changes (from the Hygiene/Pre-flight step)
             git pull origin HEAD --rebase
-            
-            # 5. Bring our audit changes back
             git stash pop
             
-            # 6. Re-stage and Commit
-            git add performance_audit.md config/dormant.flag
-            git commit -m "📊 audit: cycle complete [${{ job.status }}]"
+            # Re-stage all three critical state files
+            git add performance_audit.md config/dormant.flag config/orchestration_ledger.json
+            git commit -m "📊 audit: cycle complete & memory updated [${{ job.status }}]"
             git push origin HEAD
           else
-            echo "✅ No audit changes detected. Skipping sync."
+            echo "✅ No state changes detected."
           fi

@@ -18,61 +18,74 @@ def run_engine():
     """
     The Sovereign Logic Gate.
     Phase C Compliance:
-    - Rule 1: Isolation Mandate (Defined Paths)
     - Rule 4: Zero-Default Policy (Hard-Halt on Failure)
-    - Rule 5: Operational Hygiene (Dormancy Lifecycle)
+    - Rule 5: Operational Hygiene (In-Flight Memory Management)
     """
     CONFIG_PATH = "config/active_disk.json"
     DATA_PATH = "data/testing-input-output/"
     FLAG_PATH = Path("config/dormant.flag")
     
     # Rule 0 & 4: Instantiate Ledger with zero-default path logic
+    # LedgerManager now also handles the JSON Orchestration Memory
     ledger = LedgerManager(log_path="performance_audit.md")
 
     # 1. Boot & Auto-Wake
     try:
-        # Rule 1: Environmental hydration from the 'Foundation' (Disk)
         state = Bootloader.mount(CONFIG_PATH, DATA_PATH)
         Bootloader.hydrate(state)
         ledger.record_event("📥 HYDRATION", "State successfully hydrated from Foundation.")
     except Exception as e:
         logger.critical(f"Boot Failure: {e}")
-        # Rule 4: Hard-Halt on boot failure
         sys.exit(1)
 
-    # 2. Forensic Scan (The IDENTIFY phase)
-    # Rule 5: Scans local artifacts to determine the 'Gap'
-    target_steps = state.forensic_artifact_scan()
+    # 2. Load In-Flight Memory
+    orchestration_memory = ledger.load_orchestration_state()
+
+    # 3. Forensic Scan (The IDENTIFY phase)
+    # Pass the memory to the scan to filter out active workers
+    target_steps = state.forensic_artifact_scan(orchestration_memory)
     
+    # 4. Memory Cleanup (The HOUSEKEEPING phase)
+    # If a job was in memory but forensic_artifact_scan didn't return it because 
+    # its outputs are now present, we clear the lock.
+    if orchestration_memory:
+        for job_name in list(orchestration_memory.keys()):
+            # Find the step definition in manifest
+            step_def = next((s for s in state.manifest_data["pipeline_steps"] if s['name'] == job_name), None)
+            if step_def:
+                # Check if produced artifacts now exist
+                outputs_exist = all((Path(DATA_PATH) / f).exists() for f in step_def['produces'])
+                if outputs_exist:
+                    ledger.clear_lock(job_name)
+                    ledger.record_event("🔓 LOCK_RELEASE", f"Job {job_name} completed successfully. Lock cleared.")
+
     if not target_steps:
-        logger.info("✅ MISSION COMPLETE: Pipeline Saturated. Entering Dormancy.")
+        logger.info("✅ MISSION COMPLETE: Pipeline Saturated or Workers In-Flight. Entering Dormancy.")
         
-        # Rule 5: Generate Dormancy Flag for the Gatekeeper (Simplified STATUS)
-        FLAG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(FLAG_PATH, "w", encoding="utf-8") as f:
-            f.write("STATUS: DORMANT")
+        # Only set DORMANT if there is absolutely no work and NO workers in flight
+        active_memory = ledger.load_orchestration_state()
+        if not active_memory:
+            FLAG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(FLAG_PATH, "w", encoding="utf-8") as f:
+                f.write("STATUS: DORMANT")
             
         ledger.log_scan(
-            project_id=state.project_id, 
-            status="SATURATED_TERMINATED", 
+            state.project_id, 
+            status="SATURATED_OR_WAITING", 
             gap="NONE"
         )
         return
 
-    # 3. Active State Affirmation
-    # If we have work to do, ensure the flag reflects ACTIVE status
+    # 5. Active State Affirmation
     if FLAG_PATH.exists():
         FLAG_PATH.write_text("STATUS: ACTIVE", encoding="utf-8")
 
-    # 4. Dispatch (The TRIGGER phase)
-    logger.info(f"🔍 Gaps Detected: {len(target_steps)} tasks ready.")
+    # 6. Dispatch (The TRIGGER phase)
+    logger.info(f"🔍 Gaps Detected: {len(target_steps)} tasks ready for pulse.")
     dispatcher = Dispatcher()
-    
-    # Track overall success of the orchestration pulse
     all_dispatches_successful = True 
     
     for step in target_steps:
-        # Rule 4 Violation Correction: Direct key access ensures crash on data integrity failure.
         try:
             manifest_id = state.manifest_data["manifest_id"]
             
@@ -84,8 +97,9 @@ def run_engine():
                 "produces": step['produces']
             }
             
-            # Logic Gate: Verify signal acceptance from worker repositories
+            # Logic Gate: Signal the worker
             if dispatcher.trigger_worker(step['target_repo'], payload):
+                # ledger.log_dispatch automatically updates the JSON memory to IN_PROGRESS
                 ledger.log_dispatch(
                     project_id=state.project_id, 
                     manifest_id=manifest_id, 
@@ -93,17 +107,16 @@ def run_engine():
                     target_repo=step['target_repo']
                 )
             else:
-                logger.error(f"❌ DISPATCH FAILED: Signal rejected by {step['target_repo']}")
+                logger.error(f"❌ DISPATCH FAILED: {step['target_repo']}")
                 all_dispatches_successful = False
 
         except KeyError as e:
-            # Rule 4: Zero-Default means we do NOT proceed with a fallback ID
             logger.critical(f"Protocol Breach: Missing mandatory key {e}")
-            raise KeyError(f"❌ CRITICAL: Data integrity failure in Manifest. Missing {e}")
+            raise KeyError(f"❌ CRITICAL: Data integrity failure. Missing {e}")
 
-    # FINAL SAFETY CHECK: Hard-halt the GitHub Action if dispatches failed
+    # FINAL SAFETY CHECK
     if not all_dispatches_successful:
-        logger.critical("🛑 ENGINE HALT: One or more dispatches failed. Check PAT permissions/URLs.")
+        logger.critical("🛑 ENGINE HALT: One or more dispatches failed.")
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -12,6 +12,11 @@
         "properties": {
           "name": { "type": "string" },
           "target_repo": { "type": "string" },
+          "timeout_hours": { 
+            "type": "integer",
+            "minimum": 1,
+            "description": "The maximum window (in hours) a worker is allowed to run before the engine considers it a silent failure."
+          },
           "requires": { 
             "type": "array",
             "items": { "type": "string" }
