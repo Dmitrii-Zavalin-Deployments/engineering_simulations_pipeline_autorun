@@ -40,4 +40,4 @@ echo "🛠  Surgical repairs injected. Synchronizing test data with Rule 4..."
 echo "========================================================================"
 
 # Exit with error to verify changes in the CI log preview
-exit 1
+# exit 1
