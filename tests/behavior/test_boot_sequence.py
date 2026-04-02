@@ -79,7 +79,7 @@ def test_auto_wake_trigger(fake_foundation):
                                              os.path.getmtime(dormant_flag) + 100))
     
     # Bootloader is static
-    bootloader.check_wake_status()
+    Bootloader.mount(str(fake_foundation["active_disk"]), str(fake_foundation["root"]))
     
     # Expectation: Flag is removed or set to ACTIVE
     assert not dormant_flag.exists() or "ACTIVE" in dormant_flag.read_text()
@@ -99,7 +99,6 @@ def test_poisoned_manifest_schema_enforcement(fake_foundation):
     with patch('src.core.bootloader.Bootloader.hydrate') as mock_fetch:
         mock_fetch.return_value = poisoned_data
         
-        bootloader = Bootloader(root_path=fake_foundation["root"])
         
         # Expectation: jsonschema.validate (or your internal check) raises error
         with pytest.raises(ValidationError):
