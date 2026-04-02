@@ -5,6 +5,7 @@ import json
 import os
 from unittest.mock import patch
 from jsonschema import ValidationError
+from src.core.bootloader import Bootloader
 
 # Assuming your source is in the python path
 from src.core.bootloader import Bootloader
@@ -55,8 +56,7 @@ def test_clean_wakeup_hydration(fake_foundation):
         # Simulate local disk pointing to a manifest
         mock_fetch.return_value = fake_foundation["manifest_content"]
         
-        bootloader = Bootloader(root_path=fake_foundation["root"])
-        state = bootloader.hydrate()
+        state = Bootloader.mount(str(fake_foundation["active_disk"]), str(fake_foundation["root"]))
         
         assert isinstance(state, OrchestrationState)
         assert state.project_id == "navier-stokes-test"
@@ -102,7 +102,7 @@ def test_poisoned_manifest_schema_enforcement(fake_foundation):
         
         # Expectation: jsonschema.validate (or your internal check) raises error
         with pytest.raises(ValidationError):
-            bootloader.hydrate()
+            Bootloader.mount(str(fake_foundation["active_disk"]), str(fake_foundation["root"]))
 
 def test_missing_foundation_halt(tmp_path):
     """
@@ -115,4 +115,4 @@ def test_missing_foundation_halt(tmp_path):
     # Bootloader is static
     
     with pytest.raises(FileNotFoundError):
-        bootloader.hydrate()
+        Bootloader.mount(str(fake_foundation["active_disk"]), str(fake_foundation["root"]))
