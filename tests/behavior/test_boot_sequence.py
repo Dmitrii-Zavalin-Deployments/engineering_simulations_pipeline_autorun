@@ -51,7 +51,7 @@ def test_clean_wakeup_hydration(fake_foundation):
     Scenario: Clean Wake-Up
     Verifies that OrchestrationState hydrates and records the event.
     """
-    with patch('src.core.bootloader.fetch_remote_manifest') as mock_fetch:
+    with patch('src.core.bootloader.Bootloader.hydrate') as mock_fetch:
         # Simulate local disk pointing to a manifest
         mock_fetch.return_value = fake_foundation["manifest_content"]
         
@@ -78,7 +78,7 @@ def test_auto_wake_trigger(fake_foundation):
     os.utime(fake_foundation["active_disk"], (os.path.getatime(dormant_flag) + 100, 
                                              os.path.getmtime(dormant_flag) + 100))
     
-    bootloader = Bootloader(root_path=root)
+    # Bootloader is static
     bootloader.check_wake_status()
     
     # Expectation: Flag is removed or set to ACTIVE
@@ -96,7 +96,7 @@ def test_poisoned_manifest_schema_enforcement(fake_foundation):
         # MISSING pipeline_steps
     }
     
-    with patch('src.core.bootloader.fetch_remote_manifest') as mock_fetch:
+    with patch('src.core.bootloader.Bootloader.hydrate') as mock_fetch:
         mock_fetch.return_value = poisoned_data
         
         bootloader = Bootloader(root_path=fake_foundation["root"])
@@ -113,7 +113,7 @@ def test_missing_foundation_halt(tmp_path):
     empty_dir = tmp_path / "empty_vault"
     empty_dir.mkdir()
     
-    bootloader = Bootloader(root_path=empty_dir)
+    # Bootloader is static
     
     with pytest.raises(FileNotFoundError):
         bootloader.hydrate()

@@ -72,7 +72,7 @@ class LedgerManager:
                 content = json.load(f)
                 # Ensure the new structure exists even if reading an old-style file
                 if "steps" not in content:
-                    return {"metadata": content.get("metadata", {}), "steps": {}}
+                    return {"metadata": content["metadata"], "steps": {}}
                 return content
         except json.JSONDecodeError:
             logger.error("Orchestration Ledger corrupt. Resetting to safe structure.")

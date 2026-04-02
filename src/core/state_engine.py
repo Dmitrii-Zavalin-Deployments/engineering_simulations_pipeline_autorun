@@ -3,7 +3,7 @@
 import json
 import logging
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jsonschema import validate
 
 logger = logging.getLogger("Engine.State")
@@ -64,7 +64,7 @@ class OrchestrationState:
         last_trigger = datetime.fromisoformat(last_trigger_str)
         
         # Comparison logic remains mathematical and strict
-        is_stale = datetime.utcnow() > (last_trigger + timedelta(hours=timeout_h))
+        is_stale = datetime.now(timezone.utc) > (last_trigger + timedelta(hours=timeout_h))
         
         if is_stale:
             logger.warning(f"⚠️ Job [{job_name}] has exceeded its {timeout_h}h window. Marking as STALE.")
