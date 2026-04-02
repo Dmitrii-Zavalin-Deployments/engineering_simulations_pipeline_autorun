@@ -33,7 +33,7 @@ def mock_env(tmp_path):
 
 def test_scenario_in_flight_lock(mock_env):
     """Scenario: Verify valid IN_PROGRESS status prevents re-dispatch."""
-    with patch("src.core.state_engine.Path.exists", return_value=True):
+    with patch("src.core.state_engine.Path.exists", return_value=False):
         engine = OrchestrationState(mock_env["config"], mock_env["data"])
         engine.hydrate_manifest(mock_env["manifest"])
     
@@ -46,7 +46,7 @@ def test_scenario_in_flight_lock(mock_env):
 
 def test_scenario_timeout_recovery(mock_env):
     """Scenario: Verify stale IN_PROGRESS status triggers recovery."""
-    with patch("src.core.state_engine.Path.exists", return_value=True):
+    with patch("src.core.state_engine.Path.exists", return_value=False):
         engine = OrchestrationState(mock_env["config"], mock_env["data"])
         engine.hydrate_manifest(mock_env["manifest"])
     
@@ -59,7 +59,7 @@ def test_scenario_timeout_recovery(mock_env):
 
 def test_scenario_blocked_step(mock_env):
     """Scenario: Verify ledger 'COMPLETED' is ignored if file is missing physically."""
-    with patch("src.core.state_engine.Path.exists", return_value=True):
+    with patch("src.core.state_engine.Path.exists", return_value=False):
         engine = OrchestrationState(mock_env["config"], mock_env["data"])
         engine.hydrate_manifest(mock_env["manifest"])
     

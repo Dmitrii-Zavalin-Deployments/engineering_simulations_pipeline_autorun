@@ -55,7 +55,7 @@ def test_clean_wakeup_hydration(fake_foundation):
         # Simulate local disk pointing to a manifest
         mock_fetch.return_value = fake_foundation["manifest_content"]
         
-        state = Bootloader.mount(str(fake_foundation["active_disk"]), str(fake_foundation["root"]))
+        state = Bootloader.mount(str(str(tmp_path / "missing.json")), str(fake_foundation["root"]))
         
         assert isinstance(state, OrchestrationState)
         assert state.project_id == "navier-stokes-test"
@@ -74,11 +74,11 @@ def test_auto_wake_trigger(fake_foundation):
     dormant_flag.write_text("STATUS: DORMANT")
     
     # Ensure active_disk appears "newer" than the flag
-    os.utime(fake_foundation["active_disk"], (os.path.getatime(dormant_flag) + 100, 
+    os.utime(str(tmp_path / "missing.json"), (os.path.getatime(dormant_flag) + 100, 
                                              os.path.getmtime(dormant_flag) + 100))
     
     # Bootloader is static
-    Bootloader.mount(str(fake_foundation["active_disk"]), str(fake_foundation["root"]))
+    Bootloader.mount(str(str(tmp_path / "missing.json")), str(fake_foundation["root"]))
     
     # Expectation: Flag is removed or set to ACTIVE
     assert not dormant_flag.exists() or "ACTIVE" in dormant_flag.read_text()
@@ -101,7 +101,7 @@ def test_poisoned_manifest_schema_enforcement(fake_foundation):
         
         # Expectation: jsonschema.validate (or your internal check) raises error
         with pytest.raises(ValidationError):
-            Bootloader.mount(str(fake_foundation["active_disk"]), str(fake_foundation["root"]))
+            Bootloader.mount(str(str(tmp_path / "missing.json")), str(fake_foundation["root"]))
 
 def test_missing_foundation_halt(tmp_path):
     """
@@ -114,4 +114,4 @@ def test_missing_foundation_halt(tmp_path):
     # Bootloader is static
     
     with pytest.raises(FileNotFoundError):
-        Bootloader.mount(str(fake_foundation["active_disk"]), str(fake_foundation["root"]))
+        Bootloader.mount(str(str(tmp_path / "missing.json")), str(fake_foundation["root"]))
