@@ -19,7 +19,7 @@ def run_engine():
     The Sovereign Logic Gate.
     Phase C Compliance:
     - Rule 1: Isolation Mandate (Defined Paths)
-    - Rule 4: Zero-Default Policy (Hard-Halt on Missing Data)
+    - Rule 4: Zero-Default Policy (Hard-Halt on Failure)
     - Rule 5: Operational Hygiene (Dormancy Lifecycle)
     """
     CONFIG_PATH = "config/active_disk.json"
@@ -32,7 +32,6 @@ def run_engine():
     # 1. Boot & Auto-Wake
     try:
         # Rule 1: Environmental hydration from the 'Foundation' (Disk)
-        # Bootloader.mount now handles time-based auto-wake via active_disk.json
         state = Bootloader.mount(CONFIG_PATH, DATA_PATH)
         Bootloader.hydrate(state)
         ledger.record_event("📥 HYDRATION", "State successfully hydrated from Foundation.")
@@ -69,6 +68,9 @@ def run_engine():
     logger.info(f"🔍 Gaps Detected: {len(target_steps)} tasks ready.")
     dispatcher = Dispatcher()
     
+    # Track overall success of the orchestration pulse
+    all_dispatches_successful = True 
+    
     for step in target_steps:
         # Rule 4 Violation Correction: Direct key access ensures crash on data integrity failure.
         try:
@@ -82,6 +84,7 @@ def run_engine():
                 "produces": step['produces']
             }
             
+            # Logic Gate: Verify signal acceptance from worker repositories
             if dispatcher.trigger_worker(step['target_repo'], payload):
                 ledger.log_dispatch(
                     project_id=state.project_id, 
@@ -89,10 +92,19 @@ def run_engine():
                     step_name=step['name'], 
                     target_repo=step['target_repo']
                 )
+            else:
+                logger.error(f"❌ DISPATCH FAILED: Signal rejected by {step['target_repo']}")
+                all_dispatches_successful = False
+
         except KeyError as e:
             # Rule 4: Zero-Default means we do NOT proceed with a fallback ID
             logger.critical(f"Protocol Breach: Missing mandatory key {e}")
             raise KeyError(f"❌ CRITICAL: Data integrity failure in Manifest. Missing {e}")
+
+    # FINAL SAFETY CHECK: Hard-halt the GitHub Action if dispatches failed
+    if not all_dispatches_successful:
+        logger.critical("🛑 ENGINE HALT: One or more dispatches failed. Check PAT permissions/URLs.")
+        sys.exit(1)
 
 if __name__ == "__main__":
     run_engine()
