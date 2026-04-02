@@ -85,12 +85,14 @@ class LedgerManager:
         state[job_name] = {
             "status": status,
             "last_triggered": datetime.now(timezone.utc).isoformat(),
-            # Rule 4: Mandatory keys. No fallbacks allowed.
+            # Rule 4: Mandatory keys. No fallbacks allowed (Direct Access).
             "timeout_hours": metadata["timeout_hours"],
             "target_repo": metadata["target"]
         }
 
         try:
+            # Ensure the directory exists before writing
+            os.makedirs(os.path.dirname(self.orchestration_path), exist_ok=True)
             with open(self.orchestration_path, "w", encoding="utf-8") as f:
                 json.dump(state, f, indent=2)
         except IOError as e:
@@ -104,8 +106,11 @@ class LedgerManager:
         if job_name in state:
             logger.info(f"🔓 Releasing In-Flight Lock: {job_name}")
             del state[job_name]
-            with open(self.orchestration_path, "w", encoding="utf-8") as f:
-                json.dump(state, f, indent=2)
+            try:
+                with open(self.orchestration_path, "w", encoding="utf-8") as f:
+                    json.dump(state, f, indent=2)
+            except IOError as e:
+                logger.error(f"Failed to clear lock in JSON memory: {e}")
 
     # --- SECTION 3: WRAPPERS ---
 
@@ -118,7 +123,11 @@ class LedgerManager:
             metadata={"project_id": project_id, "gap_identified": gap}
         )
 
-    def log_dispatch(self, project_id: str, manifest_id: str, step_name: str, target_repo: str):
+    def log_dispatch(self, project_id: str, manifest_id: str, step_name: str, target_repo: str, timeout_hours: int):
+        """
+        Phase C Fix: Expanded signature to include mandatory timeout_hours.
+        Ensures metadata contract for update_job_status is fulfilled.
+        """
         logger.info(f"🚀 Dispatching Worker: {step_name} -> {target_repo}")
         self.record_event(
             category="🚀 DISPATCH",
@@ -126,12 +135,18 @@ class LedgerManager:
             metadata={
                 "project_id": project_id,
                 "manifest_id": manifest_id,
-                "target": target_repo
+                "target": target_repo,
+                "timeout_hours": timeout_hours
             }
         )
+        
         # Rule 5: Automatically update the In-Flight JSON memory on dispatch
+        # Rule 4 Alignment: Passing the complete metadata dictionary
         self.update_job_status(
             job_name=step_name, 
             status="IN_PROGRESS", 
-            metadata={"target": target_repo}
+            metadata={
+                "target": target_repo, 
+                "timeout_hours": timeout_hours
+            }
         )
