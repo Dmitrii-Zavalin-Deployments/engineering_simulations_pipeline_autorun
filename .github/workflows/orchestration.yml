@@ -21,13 +21,22 @@ jobs:
       - name: 🔍 Check Dormancy Flag
         id: check
         run: |
-          # Rule 1: Isolation Mandate. Block schedules if dormant; allow pushes for Auto-Wake.
-          if [[ "${{ github.event_name }}" == "schedule" ]] && [ -f "config/dormant.flag" ]; then
-            echo "status=dormant" >> $GITHUB_OUTPUT
-            echo "🛑 ENGINE DORMANT: Mission complete. Halting scheduled pulse."
+          # Rule 1: Isolation Mandate. Read internal state for Scheduled pulses.
+          FLAG_PATH="config/dormant.flag"
+          
+          # If it's a schedule, we check the content of the flag
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            if [ -f "$FLAG_PATH" ] && grep -q "STATUS: DORMANT" "$FLAG_PATH"; then
+              echo "status=dormant" >> $GITHUB_OUTPUT
+              echo "🛑 ENGINE DORMANT: Signal 'SATURATED/DORMANT' detected. Halting."
+            else
+              echo "status=active" >> $GITHUB_OUTPUT
+              echo "🚀 ENGINE ACTIVE: Signal 'ACTIVE' or missing flag. Proceeding."
+            fi
+          # If it's a push or manual trigger, we always wake the engine
           else
             echo "status=active" >> $GITHUB_OUTPUT
-            echo "🚀 ENGINE ACTIVE: Proceeding via ${{ github.event_name }}."
+            echo "🚀 AUTO-WAKE: Manual trigger detected. Ignoring dormancy flags."
           fi
 
   pre_flight_tests:
