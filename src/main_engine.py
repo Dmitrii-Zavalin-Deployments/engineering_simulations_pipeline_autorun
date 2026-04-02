@@ -104,7 +104,8 @@ def run_engine():
                     project_id=state.project_id, 
                     manifest_id=manifest_id, 
                     step_name=step['name'], 
-                    target_repo=step['target_repo']
+                    target_repo=step['target_repo'],
+                    timeout_hours=step['timeout_hours']
                 )
             else:
                 logger.error(f"❌ DISPATCH FAILED: {step['target_repo']}")
