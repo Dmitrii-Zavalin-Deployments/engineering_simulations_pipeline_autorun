@@ -155,7 +155,6 @@ def test_identity_preservation_same_ids(nomadic_env):
     
     # 1. Setup a ledger with an active job
     initial_ledger = {
-        "metadata": {"project_id": "alpha_01", "manifest_id": "man_01"},
         "metadata": {"project_id": "alpha_01", "manifest_id": "man_01"}, "steps": {"navier_stokes": {"status": "IN_PROGRESS", "timeout_hours": 6}}
     }
     ledger_path.write_text(json.dumps(initial_ledger))
@@ -197,7 +196,6 @@ def test_identity_mismatch_reset(nomadic_env, remote_pid, remote_mid, scenario_n
     # 1. Setup a ledger with 'old' identity and a 'poison' step from a different project
     initial_ledger = {
         "metadata": {"project_id": "alpha_01", "manifest_id": "man_01"},
-        "steps": {"old_project_job": {"status": "COMPLETED"}}
     }
     ledger_path.write_text(json.dumps(initial_ledger))
 
