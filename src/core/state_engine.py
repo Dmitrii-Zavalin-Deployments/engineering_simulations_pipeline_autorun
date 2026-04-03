@@ -87,14 +87,23 @@ class OrchestrationState:
             logger.error(f"⚠️ Timing Metadata Corruption for {job_name}: {e}")
             return True
 
-    def save_ledger(self, orchestration_ledger: dict):
+    def save_ledger(self, orchestration_ledger_steps: dict):
         """
         Rule 4 Compliance: Atomic Write to Disk.
-        Ensures the physical .json file matches the memory state.
+        Wraps steps in the required root structure to prevent corruption errors.
         """
+        # Reconstruct the full object so LedgerManager is happy
+        full_ledger = {
+            "metadata": {
+                "project_id": self.project_id,
+                "manifest_id": self.manifest_data["manifest_id"] if self.manifest_data else "unknown"
+            },
+            "steps": orchestration_ledger_steps
+        }
+
         try:
             with open(self.ledger_path, 'w', encoding="utf-8") as f:
-                json.dump(orchestration_ledger, f, indent=2)
+                json.dump(full_ledger, f, indent=2)
             logger.info(f"💾 Ledger Persisted: {self.ledger_path.name}")
         except Exception as e:
             logger.error(f"❌ Persistence Error: Failed to write ledger. {e}")
