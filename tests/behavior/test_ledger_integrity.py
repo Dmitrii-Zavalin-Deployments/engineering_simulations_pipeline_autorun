@@ -2,13 +2,11 @@
 
 import pytest
 import json
-import os
-from pathlib import Path
 
 # Internal Core Imports
 from src.core.update_ledger import LedgerManager
 from src.core.bootloader import Bootloader
-from src.core.constants import SystemPaths, OrchestrationStatus
+from src.core.constants import SystemPaths
 from tests.helpers.state_engine_dummy import StateEngineDummy
 
 @pytest.fixture
