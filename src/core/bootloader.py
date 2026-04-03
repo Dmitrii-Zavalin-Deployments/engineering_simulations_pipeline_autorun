@@ -65,9 +65,9 @@ class Bootloader:
                     ledger_content = json.loads(ledger_path.read_text(encoding="utf-8"))
                     
                     # Extract current identity from ledger metadata block
-                    meta = ledger_content.get("metadata", {})
-                    current_pid = meta.get("project_id")
-                    current_mid = meta.get("manifest_id")
+                    meta = ledger_content["metadata"]
+                    current_pid = meta["project_id"]
+                    current_mid = meta["manifest_id"]
 
                     # Rule: Any ID mismatch triggers a Hard Reset to prevent state pollution.
                     # This ensures the 'Round-and-Round' logic doesn't mix data from two different projects.

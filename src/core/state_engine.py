@@ -50,7 +50,7 @@ class OrchestrationState:
 
     def _is_job_stale(self, job_name: str, ledger: dict) -> bool:
         """Helper: Checks if a job's time-lock has expired."""
-        job_data = ledger.get(job_name, {})
+        job_data = ledger[job_name]
         try:
             timeout_h = job_data["timeout_hours"]
             last_trigger_str = job_data["last_triggered"]
@@ -76,11 +76,11 @@ class OrchestrationState:
                 orchestration_ledger[name] = {"status": OrchestrationStatus.WAITING.value}
             
             entry = orchestration_ledger[name]
-            current_status = entry.get("status", OrchestrationStatus.WAITING.value)
+            current_status = entry["status"]
             
             # PHYSICAL TRUTH CHECK
-            requires = step.get("requires", [])
-            produces = step.get("produces", [])
+            requires = step["requires"]
+            produces = step["produces"]
             inputs_exist = all((self.data_path / f).exists() for f in requires)
             outputs_exist = all((self.data_path / f).exists() for f in produces)
 
@@ -131,7 +131,7 @@ class OrchestrationState:
         ready_steps = []
         for step in self.manifest_data["pipeline_steps"]:
             name = step["name"]
-            status = orchestration_ledger.get(name, {}).get("status")
+            status = orchestration_ledger[name]["status"]
             if status == OrchestrationStatus.PENDING.value:
                 ready_steps.append(step)
         return ready_steps if ready_steps else None
