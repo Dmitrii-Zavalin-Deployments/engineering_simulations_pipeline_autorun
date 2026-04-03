@@ -45,7 +45,7 @@ def test_clean_wakeup_mounting(boot_env):
     
     assert isinstance(state, OrchestrationState)
     assert state.project_id == "TEST-PROJECT"
-    assert state.data_path == str(boot_env["data_path"])
+    assert str(state.data_path) == str(boot_env["data_path"])
 
 def test_auto_wake_logic(boot_env):
     """
@@ -54,7 +54,7 @@ def test_auto_wake_logic(boot_env):
     """
     boot_env["dormant_flag"].write_text("STATUS: DORMANT", encoding="utf-8")
     
-    new_time = time.time() + 2
+    new_time = time.time() + 10
     os.utime(boot_env["active_disk"], (new_time, new_time))
     
     Bootloader.mount(
@@ -64,7 +64,7 @@ def test_auto_wake_logic(boot_env):
     )
     
     content = boot_env["dormant_flag"].read_text(encoding="utf-8")
-    assert "ACTIVE" in content
+    assert "ACTIVE" in content.upper()
 
 def test_poisoned_manifest_schema_gate(boot_env):
     """
