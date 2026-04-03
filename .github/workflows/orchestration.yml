@@ -197,22 +197,22 @@ jobs:
           GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
           GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         run: |
-          # Rule 5: Operational Hygiene - Atomic State Persistence
           git config --global user.name "${GIT_USER_NAME:-'github-actions[bot]'}"
           git config --global user.email "${GIT_USER_EMAIL:-'github-actions[bot]@users.noreply.github.com'}"
           
-          # Stage the 'Metadata Handshake' Ledger, Performance Audit, and Flag
+          # TARGET ONLY CORE ARTIFACTS (Avoids __pycache__ noise)
           git add performance_audit.md config/dormant.flag config/orchestration_ledger.json
           
-          if [ -n "$(git status --porcelain)" ]; then
+          # CHECK IF THESE SPECIFIC FILES HAVE CHANGES
+          if ! git diff --cached --exit-code; then
             git stash
             git pull origin HEAD --rebase
             git stash pop
             
-            # Re-stage finalized state artifacts
+            # Re-add after rebase to ensure clean state
             git add performance_audit.md config/dormant.flag config/orchestration_ledger.json
             git commit -m "📊 audit: cycle complete | Project ID verified [${{ job.status }}]"
             git push origin HEAD
           else
-            echo "✅ No identity or status changes to sync."
+            echo "✅ No core state changes detected. Skipping sync."
           fi
