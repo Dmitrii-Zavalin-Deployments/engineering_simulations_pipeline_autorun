@@ -2,11 +2,9 @@
 
 import pytest
 import logging
-from pathlib import Path
 
 # Internal Core Imports
 from src.core.update_ledger import LedgerManager
-from src.core.constants import SystemPaths
 
 logger = logging.getLogger("Engine.Test.Ledger")
 

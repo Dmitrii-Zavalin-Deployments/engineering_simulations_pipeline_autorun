@@ -3,7 +3,6 @@
 import pytest
 import json
 import time
-from pathlib import Path
 from src.core.bootloader import Bootloader
 from src.core.state_engine import OrchestrationState
 from src.core.constants import SystemPaths

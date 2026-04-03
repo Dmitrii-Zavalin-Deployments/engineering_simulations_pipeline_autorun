@@ -1,7 +1,6 @@
 # tests/core/test_future_proof.py
 
 import pytest
-import json
 from src.core.constants import OrchestrationStatus
 from tests.helpers.state_engine_dummy import StateEngineDummy
 

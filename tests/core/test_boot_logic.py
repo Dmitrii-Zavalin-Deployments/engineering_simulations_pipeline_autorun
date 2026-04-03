@@ -1,7 +1,6 @@
 # tests/core/test_boot_logic.py
 
 import pytest
-import json
 from unittest.mock import patch, MagicMock
 
 # Internal Core Imports
