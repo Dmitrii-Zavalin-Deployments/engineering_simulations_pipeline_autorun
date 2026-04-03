@@ -2,6 +2,8 @@
 
 import pytest
 import json
+import shutil
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 # Internal Core Imports
@@ -14,17 +16,27 @@ from tests.helpers.state_engine_dummy import StateEngineDummy
 def nomadic_env(tmp_path):
     """
     Physical Node Fixture.
-    Creates a real folder structure. All I/O happens on real disk.
+    Creates a real folder structure and mirrors schema assets into the node 
+    to prevent [Errno 2] during regression runs.
     """
     # 1. Setup Physical Root
     root = tmp_path / "engine_node"
     config_dir = root / SystemPaths.CONFIG_DIR
     config_dir.mkdir(parents=True)
     
+    # 2. Mirror Physical Schemas (Asset Injection)
+    # This allows Bootloader to find 'schema/manifest_schema.json' in the test sandbox
+    project_root = Path(__file__).resolve().parent.parent.parent
+    real_schema_dir = project_root / "schema"
+    test_schema_dir = root / "schema"
+    
+    if real_schema_dir.exists():
+        shutil.copytree(real_schema_dir, test_schema_dir)
+    
     ledger_path = config_dir / SystemPaths.LEDGER
     audit_path = root / "performance_audit.md"
     
-    # 2. Seed Initial Physical State
+    # 3. Seed Initial Physical State
     initial_ledger = {
         "metadata": {
             "project_id": "INIT-PROJ",
@@ -39,7 +51,8 @@ def nomadic_env(tmp_path):
         "ledger": ledger_path,
         "audit": audit_path,
         "init_pid": "INIT-PROJ",
-        "init_mid": "MANIFEST-V1"
+        "init_mid": "MANIFEST-V1",
+        "test_schema_path": str(test_schema_dir)
     }
 
 def test_metadata_handshake_dispatch_REAL_IO(nomadic_env):
@@ -86,6 +99,7 @@ def test_identity_mismatch_forensic_reset_HYBRID(nomadic_env, new_pid, new_mid):
     Scenario: Identity Shift -> Atomic Wipe.
     BOUNDARY MOCK: Only the requests.get call is mocked.
     INTERNAL REALITY: The disk wipe and file rewrite are REAL.
+    PATH PATCH: Redirects Bootloader to look at the mirrored test schema.
     """
     # 1. Setup State and Data
     state, _ = StateEngineDummy.create(nomadic_env["root"])
@@ -98,32 +112,33 @@ def test_identity_mismatch_forensic_reset_HYBRID(nomadic_env, new_pid, new_mid):
     }
     nomadic_env["ledger"].write_text(json.dumps(initial_data))
 
-    # 2. Mock only the "Out of Instance" Boundary (Requests)
-    with patch("src.core.bootloader.requests.get") as mock_get:
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "project_id": new_pid,
-            "manifest_id": new_mid,
-            "pipeline_steps": [
-                {
-                    "name": "fresh_start", 
-                    "target_repo": "org/new", 
-                    "timeout_hours": 24,
-                    "requires": [],
-                    "produces": ["*"]
-                }
-            ]
-        }
-        mock_get.return_value = mock_response
+    # 2. Patch the SystemPath to point to our temp schema folder
+    with patch("src.core.bootloader.SystemPaths.SCHEMA_DIR", nomadic_env["test_schema_path"]):
+        # 3. Mock the Network Boundary
+        with patch("src.core.bootloader.requests.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "project_id": new_pid,
+                "manifest_id": new_mid,
+                "pipeline_steps": [
+                    {
+                        "name": "fresh_start", 
+                        "target_repo": "org/new", 
+                        "timeout_hours": 24,
+                        "requires": [],    # Required by physical schema
+                        "produces": ["*"]  # Required by physical schema
+                    }
+                ]
+            }
+            mock_get.return_value = mock_response
 
-        # 3. Execution (The core logic runs on real files)
-        Bootloader.hydrate(state)
+            # 4. Execution (Core logic remains untouched)
+            Bootloader.hydrate(state)
 
-    # 4. Physical Verification
+    # 5. Physical Verification
     updated = json.loads(nomadic_env["ledger"].read_text())
     
-    # If this passes, it proves the code physically wiped the file on disk
     assert "poison_step" not in updated["steps"], "Logic error: Poison step survived on disk."
     assert updated["metadata"]["project_id"] == new_pid
     assert "fresh_start" in updated["steps"]
