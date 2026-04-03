@@ -45,8 +45,7 @@ jobs:
     env:
       PYTHONPATH: ${{ github.workspace }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      # "pytest -s tests/ -vv --cov=src --cov-report=term-missing"
-      TEST_COMMAND: "pytest -s tests/behavior/test_forensic_behavior.py::test_scenario_blocked_step -vv"
+      TEST_COMMAND: "pytest -s tests/ -vv --cov=src --cov-report=term-missing"
     
     steps:
       - name: 🗂️ Checkout Repository
