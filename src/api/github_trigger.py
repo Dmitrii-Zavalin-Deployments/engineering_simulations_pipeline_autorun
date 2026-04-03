@@ -3,6 +3,7 @@
 import os
 import logging
 import requests
+import time
 from typing import Dict, Any
 
 # Internal Core Imports
@@ -18,6 +19,7 @@ class Dispatcher:
     - Rule 0: __slots__ Mandatory Architecture
     - Rule 3: Remote Dispatch Logic
     - Rule 4: Zero-Default Policy
+    - Rule 5: Traceability Loop (Phase C - 10s Reliability)
     """
     
     # Rule 0: Mandatory __slots__ to eliminate dict overhead
@@ -43,7 +45,7 @@ class Dispatcher:
 
     def trigger_worker(self, target_repo: str, payload: Dict[str, Any]) -> bool:
         """
-        Sends a Repository Dispatch signal to the nomadic worker.
+        Sends a Repository Dispatch signal and retrieves the Live Action Link.
         Rule 1: Isolation Mandate - Targets specific worker repos.
         """
         url = f"https://api.github.com/repos/{target_repo}/dispatches"
@@ -53,17 +55,14 @@ class Dispatcher:
         if "status" not in payload:
             payload["status"] = OrchestrationStatus.IN_PROGRESS.value
 
-        # PHASE C ALIGNMENT: 
-        # Hardcoding the caller identity as the event_type ensures the Solver 
-        # knows exactly which Engine is triggering the physics execution.
+        # PHASE C ALIGNMENT: Identifying the Triggerer
         data = {
             "event_type": "artifact_driven_simulation_engine",
             "client_payload": payload
         }
 
         try:
-            # Rule 4: Explicit or Error. 
-            # We use direct key access to trigger a Hard-Halt if the payload is malformed.
+            # Rule 4: Explicit access for logging
             step_name = payload['step'] 
             logger.info(f"📡 Dispatching Signal: [{target_repo}] for Step [{step_name}]")
         except KeyError:
@@ -71,12 +70,30 @@ class Dispatcher:
             raise KeyError("❌ CRITICAL: Step ID missing from dispatch payload.")
 
         try:
-            # Rule 5: Operational Hygiene - 15s timeout prevents hanging engine runners.
+            # Phase 1: Fire the Dispatch Command (15s network timeout)
             response = requests.post(url, json=data, headers=self.headers, timeout=15)
             
-            # GitHub API: 204 No Content indicates a successful dispatch request.
             if response.status_code == 204:
-                logger.info(f"🚀 Signal Accepted: {target_repo} activation confirmed.")
+                logger.info(f"🚀 Signal Accepted: {target_repo} Handshake Confirmed.")
+                
+                # --- TRACEABILITY LOOP (10s RELIABILITY) ---
+                # We wait 10 seconds to ensure the GitHub API has registered the run.
+                # Total cycle time for a batch of 20 jobs: ~3.5 minutes.
+                time.sleep(10.0)
+                
+                runs_url = f"https://api.github.com/repos/{target_repo}/actions/runs?event=repository_dispatch"
+                try:
+                    run_info = requests.get(runs_url, headers=self.headers, timeout=10).json()
+                    if run_info.get('workflow_runs'):
+                        # The first item in the list is the most recent dispatch run
+                        latest_run = run_info['workflow_runs'][0]['html_url']
+                        # Traceability: Including the repo name in the link message
+                        logger.info(f"🔗 Live Workflow Link [{target_repo}]: {latest_run}")
+                    else:
+                        logger.warning(f"🛰️ Signal accepted, but no live run indexed yet for {target_repo}.")
+                except Exception as e:
+                    logger.warning(f"⚠️ Traceability Error: Could not fetch link for {target_repo}. {e}")
+                
                 return True
             
             logger.error(f"❌ Handshake Refused: HTTP {response.status_code} - {response.text}")

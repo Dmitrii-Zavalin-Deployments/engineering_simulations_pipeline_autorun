@@ -22,7 +22,7 @@ class OrchestrationState:
     def __init__(self, config_path: str, data_root: str):
         self.data_path = Path(data_root)
         
-        # Rule 4: Explicit pathing to the new Schema Directory
+        # Rule 4: Explicit pathing to the Schema Directory
         self.schema_path = Path(SystemPaths.SCHEMA_DIR) / SystemPaths.MANIFEST_SCHEMA
         
         if not self.data_path.exists():
@@ -31,7 +31,6 @@ class OrchestrationState:
         try:
             with open(config_path, 'r', encoding="utf-8") as f:
                 config = json.load(f)
-                # Rule 4: Direct access. Hard-halt if config is malformed.
                 self.project_id = config['project_id']
                 self.manifest_url = config['manifest_url']
         except (FileNotFoundError, KeyError, json.JSONDecodeError) as e:
@@ -42,7 +41,6 @@ class OrchestrationState:
     def hydrate_manifest(self, manifest_json: dict):
         """Enforces Schema Sovereignty before allowing hydration."""
         try:
-            # Rule 4: Validate against the physical schema file moved to /schema
             with open(self.schema_path, 'r', encoding="utf-8") as s:
                 schema = json.load(s)
             validate(instance=manifest_json, schema=schema)
@@ -52,12 +50,24 @@ class OrchestrationState:
         except Exception as e:
             raise RuntimeError(f"❌ CRITICAL: Hard-Halt. Manifest is corrupt or Schema missing. {e}")
 
+    def _update_status(self, step_name: str, entry: dict, new_status: OrchestrationStatus, reason: str = ""):
+        """
+        Internal Transition Reporter.
+        Ensures every state change is logged for Forensic Auditing.
+        """
+        old_status = entry.get("status", "UNKNOWN")
+        if old_status != new_status.value:
+            entry["status"] = new_status.value
+            msg = f"🔄 State Mutation [{step_name}]: {old_status} -> {new_status.value}"
+            if reason:
+                msg += f" | {reason}"
+            logger.info(msg)
+
     def _is_job_stale(self, job_name: str, ledger: dict) -> bool:
         """Helper: Checks if a job's time-lock has expired."""
         job_data = ledger[job_name]
-        
-        # Rule 4: If last_triggered is None (never run), it is NOT stale yet.
         last_trigger_str = job_data["last_triggered"]
+        
         if last_trigger_str is None:
             return False
 
@@ -72,63 +82,52 @@ class OrchestrationState:
     def reconcile_and_heal(self, orchestration_ledger: dict):
         """
         The Core Logic Loop: Reconciles the Ledger against Physical Reality.
-        Implements the 30-minute 'Round-and-Round' Transition Matrix.
         """
         if not self.manifest_data:
             raise RuntimeError("❌ CRITICAL: Scan attempted without Manifest Hydration.")
 
         for step in self.manifest_data["pipeline_steps"]:
             name = step["name"]
-            
-            # Rule 4: Due to Bootloader seeding, 'name' MUST be in orchestration_ledger.
-            # If not, the engine halts to prevent "Ghost Steps".
             entry = orchestration_ledger[name]
             current_status = entry["status"]
             
-            # PHYSICAL TRUTH CHECK (No defaults allowed)
+            # PHYSICAL TRUTH CHECK
             requires = step["requires"]
             produces = step["produces"]
             inputs_exist = all((self.data_path / f).exists() for f in requires)
             outputs_exist = all((self.data_path / f).exists() for f in produces)
 
-            # --- TRANSITION LOGIC ---
+            # --- TRANSITION MATRIX ---
 
-            # 1. UNIVERSAL TRUTH: Artifact Presence = COMPLETED
+            # 1. Artifact Presence = COMPLETED
             if outputs_exist:
-                if current_status != OrchestrationStatus.COMPLETED.value:
-                    logger.info(f"✅ {name}: Success verified via Artifact. Status -> COMPLETED.")
-                entry["status"] = OrchestrationStatus.COMPLETED.value
+                self._update_status(name, entry, OrchestrationStatus.COMPLETED, "Artifact detected.")
 
-            # 2. WAITING -> PENDING (Input Saturation)
+            # 2. Input Saturation = PENDING
             elif current_status == OrchestrationStatus.WAITING.value and inputs_exist:
-                logger.info(f"🔓 {name}: Inputs detected. Status -> PENDING.")
-                entry["status"] = OrchestrationStatus.PENDING.value
+                self._update_status(name, entry, OrchestrationStatus.PENDING, "Inputs detected.")
 
-            # 3. PENDING -> WAITING (Safety Reversion / Artifact Deletion)
+            # 3. Input Loss = Revert to WAITING
             elif current_status == OrchestrationStatus.PENDING.value and not inputs_exist:
-                logger.warning(f"⚠️ {name}: Input artifacts missing. Reverting -> WAITING.")
-                entry["status"] = OrchestrationStatus.WAITING.value
+                self._update_status(name, entry, OrchestrationStatus.WAITING, "Input artifacts missing.")
 
-            # 4. IN_PROGRESS GATES (Temporal Monitoring)
+            # 4. Temporal Monitoring (IN_PROGRESS)
             elif current_status == OrchestrationStatus.IN_PROGRESS.value:
                 if self._is_job_stale(name, orchestration_ledger):
-                    logger.error(f"⌛ {name}: Execution Timeout. Status -> FAILED.")
-                    entry["status"] = OrchestrationStatus.FAILED.value
+                    self._update_status(name, entry, OrchestrationStatus.FAILED, "Execution Timeout.")
                 else:
                     logger.info(f"⏳ {name}: In-flight (within timeout window).")
 
-            # 5. COMPLETED DRIFT (The "Liar Ledger" Case)
+            # 5. Artifact Drift (COMPLETED but file missing)
             elif current_status == OrchestrationStatus.COMPLETED.value and not outputs_exist:
-                logger.warning(f"🚨 {name}: Artifact drift (File Missing). Reverting -> WAITING.")
-                entry["status"] = OrchestrationStatus.WAITING.value
+                self._update_status(name, entry, OrchestrationStatus.WAITING, "Artifact drift detected.")
 
             # 6. FAILED RECOVERY
             elif current_status == OrchestrationStatus.FAILED.value:
                 if inputs_exist:
-                    logger.info(f"🔄 {name}: Retrying... Status -> PENDING.")
-                    entry["status"] = OrchestrationStatus.PENDING.value
+                    self._update_status(name, entry, OrchestrationStatus.PENDING, "Retrying failed step.")
                 else:
-                    entry["status"] = OrchestrationStatus.WAITING.value
+                    self._update_status(name, entry, OrchestrationStatus.WAITING, "Resetting to Waiting.")
 
         return orchestration_ledger
 
@@ -137,7 +136,6 @@ class OrchestrationState:
         ready_steps = []
         for step in self.manifest_data["pipeline_steps"]:
             name = step["name"]
-            # Rule 4: Direct access. 
             status = orchestration_ledger[name]["status"]
             if status == OrchestrationStatus.PENDING.value:
                 ready_steps.append(step)
