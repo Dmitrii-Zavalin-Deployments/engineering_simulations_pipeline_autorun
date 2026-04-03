@@ -52,17 +52,24 @@ def test_auto_wake_logic(boot_env):
     Scenario: Auto-Wake Trigger
     Verifies that a newer active_disk.json flips DORMANT to ACTIVE.
     """
+    # 1. Set engine to DORMANT and push its timestamp into the past
+    past_time = time.time() - 60
     boot_env["dormant_flag"].write_text("STATUS: DORMANT", encoding="utf-8")
+    os.utime(boot_env["dormant_flag"], (past_time, past_time))
     
-    new_time = time.time() + 10
-    os.utime(boot_env["active_disk"], (new_time, new_time))
+    # 2. Ensure active_disk has a 'future' timestamp relative to the flag
+    # This guarantees config_file.stat().st_mtime > dormant_flag.stat().st_mtime
+    future_time = time.time() + 60
+    os.utime(boot_env["active_disk"], (future_time, future_time))
     
+    # 3. Mount (Trigger the internal write_text at Line 52)
     Bootloader.mount(
         str(boot_env["active_disk"]), 
         str(boot_env["data_path"]),
         str(boot_env["ledger_path"])
     )
     
+    # 4. Assert: Status is now ACTIVE on disk
     content = boot_env["dormant_flag"].read_text(encoding="utf-8")
     assert "ACTIVE" in content.upper()
 
