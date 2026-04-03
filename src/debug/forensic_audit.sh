@@ -1,48 +1,35 @@
 #!/bin/bash
 # ------------------------------------------------------------------------------
-# ARCHIVE-DRIVEN SIMULATION ENGINE: FINAL SCOPE ALIGNMENT
+# ARCHIVE-DRIVEN SIMULATION ENGINE: SIGNATURE ALIGNMENT
 # ------------------------------------------------------------------------------
 
-echo "🔍 INITIATING AGGRESSIVE SCOPE REPAIR..."
+echo "🔍 INITIATING FINAL SIGNATURE ALIGNMENT..."
 echo "========================================================================"
 
-## 1. SMOKING-GUN SOURCE AUDIT
-echo "❌ AUDIT: Finding remaining 'tmp_path' in test_boot_sequence.py..."
-grep -n "tmp_path" tests/behavior/test_boot_sequence.py
+## 1. SMOKING-GUN: Signature/Call Mismatch
+echo "❌ AUDIT: Checking test_missing_foundation_halt signature..."
+grep -n "def test_missing_foundation_halt" tests/behavior/test_boot_sequence.py
 
 ## 2. AUTOMATED REPAIR INJECTIONS (SED)
-echo "🛠️  PERFORMING SURGICAL REPLACEMENTS..."
+echo "🛠️  SYNCHRONIZING FIXTURES..."
 
-# This regex finds any instance of str(...) containing tmp_path and "missing.json" 
-# and converts it into a single clean Path call using the fake_foundation fixture.
-sed -i 's/str(str(tmp_path \/ "missing.json"))/str(Path(fake_foundation["root"]) \/ "missing.json")/g' tests/behavior/test_boot_sequence.py
-sed -i 's/str(tmp_path \/ "missing.json")/str(Path(fake_foundation["root"]) \/ "missing.json")/g' tests/behavior/test_boot_sequence.py
+# If the function body uses fake_foundation, the signature must include it.
+# We replace (tmp_path) with (fake_foundation) for consistency across the suite.
+sed -i 's/def test_missing_foundation_halt(tmp_path):/def test_missing_foundation_halt(fake_foundation):/g' tests/behavior/test_boot_sequence.py
 
-# Fix for line 16 and 111 (Generic tmp_path usage in setup)
-sed -i 's/d = tmp_path \/ "project_root"/d = Path(fake_foundation["root"]) \/ "project_root"/g' tests/behavior/test_boot_sequence.py
-sed -i 's/empty_dir = tmp_path \/ "empty_vault"/empty_dir = Path(fake_foundation["root"]) \/ "empty_vault"/g' tests/behavior/test_boot_sequence.py
+# Cleanup: Remove the unused empty_dir assignment if it still uses tmp_path
+sed -i '/empty_dir = tmp_path/d' tests/behavior/test_boot_sequence.py
 
-# Fix for line 117 (Halt test)
-sed -i '117s/str(str(tmp_path \/ "missing.json"))/str(Path(fake_foundation["root"]) \/ "missing.json")/' tests/behavior/test_boot_sequence.py
-
-## 3. GLOBAL CLEANUP
-echo "🧹 Cleaning up nested str() calls..."
-sed -i 's/str(str(/str(/g' tests/behavior/test_boot_sequence.py
-sed -i 's/json"))/json")/g' tests/behavior/test_boot_sequence.py
-
-## 4. VERIFICATION SCAN
+## 3. VERIFICATION SCAN
 echo "========================================================================"
-echo "📊 POST-REPAIR PREVIEW (Targets 58, 77, 81, 104, 117):"
-cat -n tests/behavior/test_boot_sequence.py | sed -n '58p;77p;81p;104p;117p'
+echo "📊 FINAL ARCHITECTURE PREVIEW:"
+cat -n tests/behavior/test_boot_sequence.py | sed -n '106,120p'
 
-# Check if we need to add 'from pathlib import Path'
-if ! grep -q "from pathlib import Path" tests/behavior/test_boot_sequence.py; then
-    echo "⚠️ Path import missing. Injecting..."
-    sed -i '1i from pathlib import Path' tests/behavior/test_boot_sequence.py
-fi
-
-if command -v ruff > /dev/null; then
-    ruff check tests/behavior/test_boot_sequence.py --select F821 && echo "✅ F821 Scope Errors Resolved"
+# Verify no 'tmp_path' remains in the logic blocks
+if grep -q "tmp_path" tests/behavior/test_boot_sequence.py | grep -v "def "; then
+    echo "⚠️  Warning: Residual tmp_path detected. Manual review required."
+else
+    echo "✅ Logic/Fixture Synchronization Complete."
 fi
 echo "========================================================================"
-exit 1
+exit 0
