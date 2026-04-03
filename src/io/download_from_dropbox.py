@@ -38,6 +38,7 @@ class CloudIngestor:
         self.log_path = Path(log_path) if isinstance(log_path, str) else log_path
         
         try:
+            # Phase C: Authentication Handshake
             access_token = self.token_manager.refresh_access_token(refresh_token)
             self.dbx = dropbox.Dropbox(access_token)
             logger.info("✅ CloudIngestor initialized: Session authenticated.")
@@ -59,7 +60,6 @@ class CloudIngestor:
         target_folder.mkdir(parents=True, exist_ok=True)
         
         # Normalize source folder for relative path math
-        # Dropbox paths are case-insensitive and start with '/'
         src_base = source_folder.lower().rstrip('/')
         if not src_base.startswith('/'):
             src_base = f"/{src_base}"
@@ -78,12 +78,14 @@ class CloudIngestor:
                     # Logic Gate: Identify Files for Ingestion
                     if isinstance(entry, dropbox.files.FileMetadata):
                         ext = Path(entry.name).suffix.lower()
+                        
+                        # Rule 4 & 5: If allowed_ext is empty [], all files are ingested.
                         if not allowed_ext or ext in allowed_ext:
-                            # Calculate relative path from the source root
+                            # Calculate relative path from the source root for folder reconstruction
                             rel_path = os.path.relpath(entry.path_lower, src_base)
                             local_file_path = target_folder / rel_path
                             
-                            # Ensure local directory structure exists
+                            # Ensure local directory structure matches cloud structure
                             local_file_path.parent.mkdir(parents=True, exist_ok=True)
                             self._download_file(entry.path_lower, local_file_path)
                     
@@ -108,6 +110,7 @@ class CloudIngestor:
         """
         try:
             metadata, res = self.dbx.files_download(path=dropbox_path)
+            # Binary write ensures simulation artifacts (.npy, .h5, .zip) remain uncorrupted.
             with open(local_path, "wb") as f:
                 f.write(res.content)
             logger.info(f"📁 Synced: {dropbox_path} -> {local_path}")
