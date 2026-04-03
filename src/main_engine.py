@@ -27,7 +27,7 @@ def run_engine():
     """
     CONFIG_PATH = Path(SystemPaths.CONFIG_DIR) / SystemPaths.ACTIVE_DISK
     # Rule 4: Explicit Ledger Path for Atomic Persistence
-    LEDGER_PATH = Path(SystemPaths.CONFIG_DIR) / SystemPaths.ORCHESTRATION_LEDGER
+    LEDGER_PATH = Path(SystemPaths.CONFIG_DIR) / SystemPaths.LEDGER
     DATA_PATH = Path(SystemPaths.DATA_DIR)
     
     # 1. Initialize Ledger Manager (For performance_audit.md and flag toggling)
