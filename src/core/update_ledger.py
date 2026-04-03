@@ -16,10 +16,10 @@ class LedgerManager:
     """
     The Traceability Bridge (Performance Audit & Orchestration Memory).
     Phase C Compliance: 
-    - Rule 0: __slots__ Mandatory Architecture
+    - Rule 0: __slots__ Mandatory Architecture (Memory Efficiency)
     - Rule 1: Efficiency Mandate (Dormancy Orchestration)
-    - Rule 4: Zero-Default Policy (Strict Key Access)
-    - Rule 5: Operational Hygiene (Audit Trail & Memory)
+    - Rule 4: Zero-Default Policy (Strict Key Access - No .get() defaults)
+    - Rule 5: Operational Hygiene (Atomic Audit Trail)
     """
     
     # Rule 0: Eliminate dict overhead for nomadic scalability
@@ -27,7 +27,7 @@ class LedgerManager:
 
     def __init__(self, log_path: str = "performance_audit.md"):
         self.log_path = log_path
-        # Standardized pathing via SystemPaths
+        # Standardized pathing via SystemPaths (Rule 4)
         self.orchestration_path = os.path.join(SystemPaths.CONFIG_DIR, SystemPaths.LEDGER)
         self.flag_path = os.path.join(SystemPaths.CONFIG_DIR, SystemPaths.DORMANT_FLAG)
         self.header = "# 🛰️ Simulation Engine Performance Audit\n\n"
@@ -49,6 +49,7 @@ class LedgerManager:
             try:
                 with open(self.log_path, "r", encoding="utf-8") as f:
                     current_text = f.read()
+                    # Preserve only the entries, not the duplicated header
                     existing_content = current_text.replace(self.header, "")
             except (FileNotFoundError, IOError) as e:
                 logger.warning(f"Audit Read Warning: {e}. Re-initializing buffer.")
@@ -74,22 +75,22 @@ class LedgerManager:
         try:
             with open(self.orchestration_path, "r", encoding="utf-8") as f:
                 content = json.load(f)
-                # Rule 4 Check: Ensure mandatory 'steps' key exists
-                if "steps" not in content:
-                    raise KeyError("Orchestration Ledger is missing 'steps' root.")
+                # Rule 4 Check: Hard-halt if schema is malformed
+                if "steps" not in content or "metadata" not in content:
+                    raise KeyError("Orchestration Ledger schema violation: missing root keys.")
                 return content
-        except (json.JSONDecodeError, KeyError, AttributeError) as e:
+        except (json.JSONDecodeError, KeyError) as e:
             logger.error(f"Orchestration Ledger corrupt ({e}). Resetting to safe structure.")
             return {"metadata": {}, "steps": {}}
 
     def update_job_status(self, job_name: str, status: str, metadata: Dict):
         """
-        Atomic Write for the In-Flight memory inside the 'steps' key.
-        Enforces Rule 4: Mandatory keys (timeout_hours, target) must be present in metadata.
+        Atomic Write for the In-Flight memory.
+        Enforces Rule 4: Mandatory keys (timeout_hours, target) must be present.
         """
         ledger = self.load_orchestration_state()
         
-        # Rule 4: Hard-Halt if mandatory metadata for dispatch is missing
+        # Rule 4: Strict key access. If 'timeout_hours' or 'target' is missing, it raises KeyError.
         ledger["steps"][job_name] = {
             "status": status,
             "last_triggered": datetime.now(timezone.utc).isoformat(),
@@ -97,9 +98,11 @@ class LedgerManager:
             "target_repo": metadata["target"]
         }
 
-        # Sync Metadata Header
+        # Update Identity Metadata (Handshake Persistence)
         if "project_id" in metadata:
             ledger["metadata"]["project_id"] = metadata["project_id"]
+        if "manifest_id" in metadata:
+            ledger["metadata"]["manifest_id"] = metadata["manifest_id"]
 
         try:
             os.makedirs(os.path.dirname(self.orchestration_path), exist_ok=True)
@@ -107,14 +110,14 @@ class LedgerManager:
                 json.dump(ledger, f, indent=2)
         except IOError as e:
             logger.critical(f"Failed to write to Orchestration Ledger: {e}")
+            raise RuntimeError(f"❌ CRITICAL: Ledger sync failed. {e}")
 
     # --- SECTION 3: DORMANCY ORCHESTRATOR ---
 
     def evaluate_dormancy_state(self, ledger_steps: Dict):
         """
         Rule 1: Efficiency Mandate.
-        Checks if all steps in the ledger are COMPLETED to toggle system dormancy.
-        Writes the status to config/dormant.flag for the GHA Gatekeeper.
+        Checks if all steps are COMPLETED to toggle system dormancy.
         """
         if not ledger_steps:
             new_state = "STATUS: ACTIVE"
@@ -149,20 +152,23 @@ class LedgerManager:
 
     def log_dispatch(self, project_id: str, manifest_id: str, step_name: str, target_repo: str, timeout_hours: int):
         """
-        Final Dispatch Record. Updates both the Markdown Audit and the JSON Ledger.
+        Final Dispatch Record. Fixes the Metadata Handshake for manifest_id.
         """
         logger.info(f"🚀 Dispatching Worker: {step_name} -> {target_repo}")
         
+        # 1. Update the Performance Audit (Markdown)
         self.record_event(
             category="🚀 DISPATCH",
             message=f"Command Link Handshake Confirmed for step: {step_name}",
             metadata={
                 "project_id": project_id,
+                "manifest_id": manifest_id,
                 "target": target_repo,
                 "timeout_hours": timeout_hours
             }
         )
         
+        # 2. Update the Orchestration Ledger (JSON) - Ensures atomic disk sync
         self.update_job_status(
             job_name=step_name, 
             status=OrchestrationStatus.IN_PROGRESS.value, 

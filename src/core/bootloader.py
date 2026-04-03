@@ -16,7 +16,7 @@ class Bootloader:
     """
     The Ignition System for the Nomadic Engine.
     Responsibility: Filesystem mounting, schema validation, and ledger synchronization.
-    Compliance: Rule 0 (Integrity), Rule 4 (Zero-Default), Memory-Disk Sync.
+    Compliance: Rule 0 (Integrity), Rule 1 (Clean Room), Rule 4 (Zero-Default).
     """
 
     @staticmethod
@@ -39,7 +39,6 @@ class Bootloader:
         """
         Mounting Protocol with Auto-Wake Logic.
         Standardized via SystemPaths (Rule 4).
-        Now injects ledger_path into OrchestrationState for Atomic Persistence.
         """
         config_file = Path(config_path)
         dormant_flag = Path(SystemPaths.CONFIG_DIR) / SystemPaths.DORMANT_FLAG
@@ -54,7 +53,6 @@ class Bootloader:
                     logger.error(f"Failed to reset dormancy flag: {e}")
         
         logger.info(f"🛰️ Mounting Engine Foundation: {config_path}")
-        # Phase C Alignment: Passing 3 arguments to fix the positional argument error.
         return OrchestrationState(config_path, data_path, ledger_path)
 
     @staticmethod
@@ -77,8 +75,7 @@ class Bootloader:
             Bootloader._validate_integrity(remote_manifest, SystemPaths.MANIFEST_SCHEMA)
 
             # 3. Forensic Integrity Check (Rule 4 Compliance)
-            # Use state.ledger_path to ensure SSoT (Single Source of Truth)
-            ledger_path = state.ledger_path
+            ledger_path = Path(state.ledger_path)
             target_pid = remote_manifest["project_id"]
             target_mid = remote_manifest["manifest_id"]
 
@@ -101,7 +98,7 @@ class Bootloader:
             if should_reset:
                 logger.warning(f"⚠️ Project Shift/Fresh Start: Seeding Ledger for {target_pid}")
                 
-                # Rule 4: Explicitly map all manifest steps to WAITING.
+                # Rule 4: No .get() defaults. Missing keys will trigger KeyError here.
                 fresh_steps = {}
                 for step in remote_manifest["pipeline_steps"]:
                     fresh_steps[step["name"]] = {
@@ -119,7 +116,8 @@ class Bootloader:
                     "steps": fresh_steps
                 }
                 
-                # Synchronize to Disk
+                # Rule 1: Clean Room Sync - Atomic Disk Persistence
+                ledger_path.parent.mkdir(parents=True, exist_ok=True)
                 ledger_path.write_text(json.dumps(ledger_content, indent=2), encoding="utf-8")
                 logger.info("🧹 Ledger seeded and synchronized.")
 
@@ -127,7 +125,6 @@ class Bootloader:
             state.hydrate_manifest(remote_manifest)
             logger.info(f"✅ Boot Sequence Complete: [{state.project_id}] Hydrated.")
             
-            # Return the ledger_content to ensure Main Engine memory is synced with Disk
             return ledger_content
             
         except Exception as e:
