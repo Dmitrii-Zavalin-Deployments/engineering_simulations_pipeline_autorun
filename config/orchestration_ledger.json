@@ -1,8 +1,13 @@
 {
-  "navier_stokes_execution": {
-    "status": "IN_PROGRESS",
-    "last_triggered": "2026-04-02T12:54:23.851513+00:00",
-    "timeout_hours": 6,
-    "target_repo": "Dmitrii-Zavalin-Deployments/navier_stokes_solver"
+  "metadata": {
+    "project_id": "navier_stokes_alpha_01"
+  },
+  "steps": {
+    "navier_stokes_execution": {
+      "status": "IN_PROGRESS",
+      "last_triggered": "2026-04-03T15:27:46.312631+00:00",
+      "timeout_hours": 6,
+      "target_repo": "Dmitrii-Zavalin-Deployments/navier_stokes_solver"
+    }
   }
 }
