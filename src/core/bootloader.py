@@ -46,7 +46,7 @@ class Bootloader:
 
         if dormant_flag.exists() and config_file.exists():
             # Rule 1: Efficiency. New config timestamp overrides hibernation.
-            if config_file.stat().st_mtime > dormant_flag.stat().st_mtime:
+            if config_file.stat().st_mtime >= dormant_flag.stat().st_mtime:
                 logger.info("🌅 New Configuration detected. Resetting to STATUS: ACTIVE.")
                 try:
                     dormant_flag.write_text("STATUS: ACTIVE", encoding="utf-8")
