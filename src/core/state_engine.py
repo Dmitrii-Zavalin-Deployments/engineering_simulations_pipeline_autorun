@@ -55,7 +55,8 @@ class OrchestrationState:
         Internal Transition Reporter.
         Ensures every state change is logged for Forensic Auditing.
         """
-        old_status = entry.get("status", "UNKNOWN")
+        # Rule 4 Compliance: Direct access. If status is missing, we WANT a KeyError.
+        old_status = entry["status"]
         if old_status != new_status.value:
             entry["status"] = new_status.value
             msg = f"🔄 State Mutation [{step_name}]: {old_status} -> {new_status.value}"
