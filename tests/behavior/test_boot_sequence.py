@@ -1,30 +1,43 @@
-# tests/behavior/test_boot_sequence.py
-
 import pytest
 import json
 import time
 import os
+from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+# Core Engine Imports
 from src.core.bootloader import Bootloader
 from src.core.state_engine import OrchestrationState
 from src.core.constants import SystemPaths
-from tests.helpers.state_engine_dummy import StateEngineDummy
 
 @pytest.fixture
-def boot_env(tmp_path):
+def boot_env():
     """
-    Creates the physical environment for boot testing.
-    Uses the dummy factory to ensure schema and paths are correct.
+    Real-World Environment Fixture.
+    Uses SystemPaths to align with the actual nomadic directory structure.
     """
-    state, data_path = StateEngineDummy.create(tmp_path)
+    # 1. Map to Real Internal Paths
+    config_dir = Path(SystemPaths.CONFIG_DIR)
+    data_path = Path(SystemPaths.DATA_DIR)
     
-    config_dir = tmp_path / SystemPaths.CONFIG_DIR
     active_disk = config_dir / SystemPaths.ACTIVE_DISK
     dormant_flag = config_dir / SystemPaths.DORMANT_FLAG
     ledger_path = config_dir / SystemPaths.LEDGER
     
+    # 2. Ensure directories exist for the test cycle
+    config_dir.mkdir(parents=True, exist_ok=True)
+    data_path.mkdir(parents=True, exist_ok=True)
+    
+    # 3. Ensure a valid active_disk exists for the loader to mount
+    if not active_disk.exists():
+        initial_config = {
+            "project_id": "TEST-PROJECT",
+            "manifest_url": "https://api.test/manifest",
+            "active": True
+        }
+        active_disk.write_text(json.dumps(initial_config), encoding="utf-8")
+    
     return {
-        "root": tmp_path,
         "config_dir": config_dir,
         "active_disk": active_disk,
         "dormant_flag": dormant_flag,
@@ -35,7 +48,7 @@ def boot_env(tmp_path):
 def test_clean_wakeup_mounting(boot_env):
     """
     Scenario: Clean Wake-Up
-    Verifies that Bootloader.mount returns a valid OrchestrationState.
+    Verifies that Bootloader.mount returns a valid OrchestrationState using real paths.
     """
     state = Bootloader.mount(
         str(boot_env["active_disk"]), 
@@ -45,50 +58,42 @@ def test_clean_wakeup_mounting(boot_env):
     
     assert isinstance(state, OrchestrationState)
     assert state.project_id == "TEST-PROJECT"
+    # Ensure type consistency (String vs Path)
     assert str(state.data_path) == str(boot_env["data_path"])
 
 def test_auto_wake_logic(boot_env):
     """
     Scenario: Auto-Wake Trigger
-    Verifies that a newer active_disk.json flips DORMANT to ACTIVE.
-    
-    NOTE: Production is verified; this test alignment ensures 
-    CI/FS synchronicity.
+    Verifies that a newer active_disk.json flips DORMANT to ACTIVE on the real disk.
     """
-    # 1. Define paths clearly
     dormant_path = boot_env["dormant_flag"]
     active_disk = boot_env["active_disk"]
     
-    # 2. Force DORMANT state and backdate it 1 hour
-    # This creates a massive 'Gravity Well' for the timestamp comparison
+    # 1. Force DORMANT state and anchor it 1 hour in the past
     dormant_path.write_text("STATUS: DORMANT", encoding="utf-8")
     past_time = time.time() - 3600
     os.utime(dormant_path, (past_time, past_time))
     
-    # 3. Touch the active_disk to the 'Now'
+    # 2. Touch the active_disk to the 'Now' to trigger the comparison logic
     os.utime(active_disk, None) 
     
-    # 4. Trigger Mount
-    # We don't even need the returned state yet, we are testing the Side-Effect
+    # 3. Trigger Mount (The Logic Gate)
     Bootloader.mount(
         str(active_disk), 
         str(boot_env["data_path"]),
         str(boot_env["ledger_path"])
     )
     
-    # 5. The "Super-Rational" Assertion
-    # We read the file twice if needed, or use a tiny sleep to allow FS sync in CI
-    time.sleep(0.1) 
+    # 4. Verify Side-Effect on Disk
+    time.sleep(0.1) # FS Sync buffer
     content = dormant_path.read_text(encoding="utf-8").strip().upper()
     
-    assert "ACTIVE" in content, (
-        f"FS Sync Failure: Expected ACTIVE in {dormant_path}, "
-        f"but found '{content}'. Check if Bootloader is writing to a different node."
-    )
+    assert "ACTIVE" in content, f"Engine failed to flip flag at {dormant_path}. Found: {content}"
 
 def test_poisoned_manifest_schema_gate(boot_env):
     """
     Scenario: Poisoned Manifest (Schema Enforcement)
+    Ensures that the real StateEngine prevents hydration if the schema is breached.
     """
     state = Bootloader.mount(
         str(boot_env["active_disk"]), 
@@ -99,6 +104,7 @@ def test_poisoned_manifest_schema_gate(boot_env):
     poisoned_data = {
         "manifest_id": "FAIL-001",
         "project_id": "POISON-PROJECT"
+        # Missing required 'pipeline_steps' or other schema keys
     }
     
     with pytest.raises(RuntimeError) as excinfo:
@@ -109,8 +115,11 @@ def test_poisoned_manifest_schema_gate(boot_env):
 def test_missing_config_halt(boot_env):
     """
     Scenario: Missing Foundation
+    Ensures Bootloader fails correctly if the active_disk is missing.
     """
-    missing_path = boot_env["config_dir"] / "non_existent.json"
+    missing_path = boot_env["config_dir"] / "ghost_config.json"
+    if missing_path.exists():
+        os.remove(missing_path)
     
     with pytest.raises(RuntimeError) as excinfo:
         Bootloader.mount(
@@ -124,8 +133,7 @@ def test_missing_config_halt(boot_env):
 def test_ledger_wipe_on_project_shift(boot_env):
     """
     Scenario: Project ID Mismatch
-    Verifies that if the remote manifest ID differs from the local ledger,
-    the ledger is wiped to prevent data pollution.
+    Verifies that a shift in Project ID clears the local ledger artifacts.
     """
     ledger_path = boot_env["ledger_path"]
     stale_ledger = {
@@ -140,14 +148,13 @@ def test_ledger_wipe_on_project_shift(boot_env):
         str(ledger_path)
     )
     
-    # REPLACED requests_mock with standard unittest.mock.patch
+    # Mocking the External API call only, keeping internal logic real
     with patch('src.core.bootloader.requests.get') as mock_get:
         new_manifest = {
             "project_id": "TEST-PROJECT",
             "manifest_id": "MANIFEST-001",
             "pipeline_steps": []
         }
-        # Mocking the response object
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = new_manifest
@@ -155,6 +162,7 @@ def test_ledger_wipe_on_project_shift(boot_env):
         
         Bootloader.hydrate(state)
     
+    # Verify the physical file was wiped and re-seeded
     updated_ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
     assert updated_ledger["metadata"]["project_id"] == "TEST-PROJECT"
     assert "old_step" not in updated_ledger["steps"]
