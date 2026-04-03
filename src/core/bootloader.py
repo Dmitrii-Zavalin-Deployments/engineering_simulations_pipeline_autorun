@@ -35,10 +35,11 @@ class Bootloader:
             raise RuntimeError(f"CRITICAL: {schema_filename} is corrupt or invalid. {e}")
 
     @staticmethod
-    def mount(config_path: str, data_path: str) -> OrchestrationState:
+    def mount(config_path: str, data_path: str, ledger_path: str) -> OrchestrationState:
         """
         Mounting Protocol with Auto-Wake Logic.
         Standardized via SystemPaths (Rule 4).
+        Now injects ledger_path into OrchestrationState for Atomic Persistence.
         """
         config_file = Path(config_path)
         dormant_flag = Path(SystemPaths.CONFIG_DIR) / SystemPaths.DORMANT_FLAG
@@ -53,7 +54,8 @@ class Bootloader:
                     logger.error(f"Failed to reset dormancy flag: {e}")
         
         logger.info(f"🛰️ Mounting Engine Foundation: {config_path}")
-        return OrchestrationState(config_path, data_path)
+        # Phase C Alignment: Passing 3 arguments to fix the positional argument error.
+        return OrchestrationState(config_path, data_path, ledger_path)
 
     @staticmethod
     def hydrate(state: OrchestrationState) -> dict:
@@ -75,7 +77,8 @@ class Bootloader:
             Bootloader._validate_integrity(remote_manifest, SystemPaths.MANIFEST_SCHEMA)
 
             # 3. Forensic Integrity Check (Rule 4 Compliance)
-            ledger_path = Path(SystemPaths.CONFIG_DIR) / SystemPaths.LEDGER
+            # Use state.ledger_path to ensure SSoT (Single Source of Truth)
+            ledger_path = state.ledger_path
             target_pid = remote_manifest["project_id"]
             target_mid = remote_manifest["manifest_id"]
 
