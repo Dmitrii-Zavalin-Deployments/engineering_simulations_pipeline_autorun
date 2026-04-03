@@ -3,7 +3,6 @@
 import pytest
 import json
 import os
-from pathlib import Path
 from unittest.mock import patch
 from jsonschema import ValidationError
 from src.core.bootloader import Bootloader
