@@ -46,7 +46,7 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       # "pytest -s tests/ -vv --cov=src --cov-report=term-missing"
-      TEST_COMMAND: "pytest -s tests/test_integration_gate.py -vv"
+      TEST_COMMAND: "pytest -s tests/behavior/test_boot_sequence.py -vv"
     
     steps:
       - name: 🗂️ Checkout Repository
