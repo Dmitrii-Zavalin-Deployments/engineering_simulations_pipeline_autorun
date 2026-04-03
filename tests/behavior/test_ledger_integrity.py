@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 # Internal Core Imports
 from src.core.update_ledger import LedgerManager
 from src.core.bootloader import Bootloader
-from src.core.constants import SystemPaths
+from src.core.constants import SystemPaths, OrchestrationStatus
 from tests.helpers.state_engine_dummy import StateEngineDummy
 
 @pytest.fixture
@@ -106,7 +106,13 @@ def test_identity_mismatch_forensic_reset_HYBRID(nomadic_env, new_pid, new_mid):
             "project_id": new_pid,
             "manifest_id": new_mid,
             "pipeline_steps": [
-                {"name": "fresh_start", "target_repo": "org/new", "timeout_hours": 24}
+                {
+                    "name": "fresh_start", 
+                    "target_repo": "org/new", 
+                    "timeout_hours": 24,
+                    "requires": [],
+                    "produces": ["*"]
+                }
             ]
         }
         mock_get.return_value = mock_response
@@ -121,3 +127,4 @@ def test_identity_mismatch_forensic_reset_HYBRID(nomadic_env, new_pid, new_mid):
     assert "poison_step" not in updated["steps"], "Logic error: Poison step survived on disk."
     assert updated["metadata"]["project_id"] == new_pid
     assert "fresh_start" in updated["steps"]
+    assert updated["steps"]["fresh_start"]["status"] == OrchestrationStatus.WAITING.value
