@@ -103,12 +103,11 @@ def test_poisoned_manifest_schema_enforcement(fake_foundation):
         with pytest.raises(ValidationError):
             Bootloader.mount(str(str(tmp_path / "missing.json")), str(fake_foundation["root"]))
 
-def test_missing_foundation_halt(tmp_path):
+def test_missing_foundation_halt(fake_foundation):
     """
     Scenario: Missing Foundation
     Engine must crash if active_disk.json is not found.
     """
-    empty_dir = tmp_path / "empty_vault"
     empty_dir.mkdir()
     
     # Bootloader is static
