@@ -2,6 +2,7 @@
 
 import pytest
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,30 +13,57 @@ from src.core.constants import SystemPaths, OrchestrationStatus
 from tests.helpers.state_engine_dummy import StateEngineDummy
 
 @pytest.fixture
-def nomadic_env(tmp_path):
-    """Sets up a physical nomadic workspace for Ledger testing."""
-    config_dir = tmp_path / SystemPaths.CONFIG_DIR
-    config_dir.mkdir(parents=True)
+def nomadic_env():
+    """
+    Real-World Ledger Environment.
+    Aligns with SystemPaths to ensure we aren't testing 'shadow' files.
+    """
+    config_dir = Path(SystemPaths.CONFIG_DIR)
+    # Use the actual ledger path defined in your constants
+    ledger_path = config_dir / SystemPaths.LEDGER
+    audit_path = Path("performance_audit.md")
     
-    ledger_file = config_dir / SystemPaths.LEDGER
-    audit_file = tmp_path / "performance_audit.md"
+    config_dir.mkdir(parents=True, exist_ok=True)
     
-    # Initialize with the Forensic SSoT Structure
-    initial_structure = {
+    # Initialize a clean ledger for the handshake test
+    initial_ledger = {
         "metadata": {
-            "project_id": "TEST-PROJ-V1",
+            "project_id": "INIT-PROJ",
             "manifest_id": "MANIFEST-V1"
         },
         "steps": {}
     }
-    ledger_file.write_text(json.dumps(initial_structure), encoding="utf-8")
-    audit_file.write_text("# 🛰️ Simulation Engine Performance Audit\n\n", encoding="utf-8")
+    ledger_path.write_text(json.dumps(initial_ledger), encoding="utf-8")
     
     return {
-        "root": tmp_path,
-        "ledger": str(ledger_file),
-        "audit": str(audit_file)
+        "ledger": str(ledger_path),
+        "audit": str(audit_path)
     }
+
+def test_metadata_handshake_dispatch(nomadic_env):
+    """
+    Scenario: log_dispatch updates global identity metadata.
+    This test now uses the real ledger path from nomadic_env.
+    """
+    manager = LedgerManager(log_path=nomadic_env["audit"])
+    # Explicitly set the orchestration path to the real ledger
+    manager.orchestration_path = Path(nomadic_env["ledger"])
+    
+    # The Handshake: Updating identity
+    manager.log_dispatch(
+        project_id="NEW-PROJECT-ID",
+        manifest_id="NEW-MANIFEST-ID",
+        step_name="geometry_gen",
+        target_repo="org/geom",
+        timeout_hours=2
+    )
+    
+    # Read back from the physical file
+    data = json.loads(Path(nomadic_env["ledger"]).read_text(encoding="utf-8"))
+    
+    # Asserting against the new identity
+    assert data["metadata"]["project_id"] == "NEW-PROJECT-ID"
+    assert data["metadata"]["manifest_id"] == "NEW-MANIFEST-ID"
 
 def test_atomic_nested_update(nomadic_env):
     """
@@ -60,27 +88,6 @@ def test_atomic_nested_update(nomadic_env):
     assert "physics_solve" in data["steps"]
     assert data["steps"]["physics_solve"]["status"] == OrchestrationStatus.IN_PROGRESS.value
     assert "last_triggered" in data["steps"]["physics_solve"]
-
-def test_metadata_handshake_dispatch(nomadic_env):
-    """
-    Scenario: log_dispatch updates global identity metadata.
-    """
-    manager = LedgerManager(log_path=nomadic_env["audit"])
-    manager.orchestration_path = Path(nomadic_env["ledger"])
-    
-    manager.log_dispatch(
-        project_id="NEW-PROJECT-ID",
-        manifest_id="NEW-MANIFEST-ID",
-        step_name="geometry_gen",
-        target_repo="org/geom",
-        timeout_hours=2
-    )
-    
-    data = json.loads(Path(nomadic_env["ledger"]).read_text())
-        
-    assert data["metadata"]["project_id"] == "NEW-PROJECT-ID"
-    assert data["metadata"]["manifest_id"] == "NEW-MANIFEST-ID"
-    assert "geometry_gen" in data["steps"]
 
 def test_audit_trail_atomic_prepending(nomadic_env):
     """
