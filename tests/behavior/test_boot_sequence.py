@@ -3,6 +3,7 @@
 import pytest
 import json
 import os
+from pathlib import Path
 from unittest.mock import patch
 from jsonschema import ValidationError
 from src.core.bootloader import Bootloader
@@ -11,9 +12,9 @@ from src.core.bootloader import Bootloader
 from src.core.state_engine import OrchestrationState
 
 @pytest.fixture
-def fake_foundation(tmp_path):
+def fake_foundation(Path(fake_foundation["root"])):
     """Creates a temporary directory structure for nomadic testing."""
-    d = tmp_path / "project_root"
+    d = Path(fake_foundation["root"]) / "project_root"
     d.mkdir()
     data_dir = d / "data"
     data_dir.mkdir()
@@ -73,8 +74,7 @@ def test_auto_wake_trigger(fake_foundation):
     dormant_flag = root / "dormant.flag"
     dormant_flag.write_text("STATUS: DORMANT")
     
-    # Ensure active_disk appears "newer" than the flag
-    os.utime(str(tmp_path / "missing.json"), (os.path.getatime(dormant_flag) + 100, 
+    os.utime(str(Path(fake_foundation["root"]) / "missing.json"), (os.path.getatime(dormant_flag) + 100,
                                              os.path.getmtime(dormant_flag) + 100))
     
     # Bootloader is static
