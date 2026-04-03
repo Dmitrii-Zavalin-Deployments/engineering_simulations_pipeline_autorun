@@ -1,148 +1,149 @@
 # tests/behavior/test_cloud_io.py
 
 import pytest
+import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+import dropbox
 
-# SSoT Alignment: Importing from your actual physical files
+# Internal Core Imports
 from src.io.dropbox_utils import TokenManager
 from src.io.download_from_dropbox import CloudIngestor
+from src.core.constants import SystemPaths
+from tests.helpers.state_engine_dummy import StateEngineDummy
 
 @pytest.fixture
-def mock_io_env(tmp_path):
-    """Sets up a temporary local data vault and mock credentials."""
-    data_dir = tmp_path / "data" / "testing-input-output"
-    data_dir.mkdir(parents=True)
+def cloud_env(tmp_path):
+    """
+    Sets up a physical nomadic data node and mock cloud credentials.
+    Uses StateEngineDummy to ensure the data_path is architecturally correct.
+    """
+    state, data_path = StateEngineDummy.create(tmp_path)
     
     log_file = tmp_path / "dropbox_download_log.txt"
     
     return {
-        "data_dir": data_dir,
+        "data_dir": data_path,
         "log_file": log_file,
-        "app_key": "mock_key",
-        "app_secret": "mock_secret",
-        "refresh_token": "mock_refresh_token"
+        "refresh_token": "mock_refresh_token_123"
     }
 
-def test_recursive_reconstruction(mock_io_env):
+def test_recursive_path_reconstruction(cloud_env):
     """
     Scenario: Recursive Reconstruction
-    Verifies that the Ingestor creates nested local paths from cloud artifacts.
-    Compliance: Rule 1 (Precision Integrity).
+    Verifies that the Ingestor reconstructs nested paths (e.g., /sim/out/data.h5) 
+    locally inside the nomadic data vault.
     """
-    # 1. Setup Mock TokenManager and Dropbox Client
+    # 1. Setup Mock TokenManager
     mock_tm = MagicMock(spec=TokenManager)
     mock_tm.refresh_access_token.return_value = "fake_access_token"
     
     with patch('dropbox.Dropbox') as mock_dbx_cls:
         mock_dbx = mock_dbx_cls.return_value
         
-        # 2. Instantiate real Ingestor with injected dependencies
+        # 2. Instantiate real Ingestor
         ingestor = CloudIngestor(
             token_manager=mock_tm, 
-            refresh_token=mock_io_env["refresh_token"], 
-            log_path=mock_io_env["log_file"]
+            refresh_token=cloud_env["refresh_token"], 
+            log_path=cloud_env["log_file"]
         )
         
-        # 3. Mock the Dropbox file entries (Recursive Discovery)
-        import dropbox
+        # 3. Mock Dropbox Metadata (Simulating a nested file)
         mock_file = MagicMock(spec=dropbox.files.FileMetadata)
-        mock_file.name = "data.h5"
-        mock_file.path_lower = "/sim_v1/outputs/data.h5"
+        mock_file.name = "simulation_results.h5"
+        # The cloud path is deeper than the source root
+        mock_file.path_lower = "/projects/oceans/outputs/simulation_results.h5"
         
         mock_result = MagicMock()
         mock_result.entries = [mock_file]
         mock_result.has_more = False
-        
         mock_dbx.files_list_folder.return_value = mock_result
         
-        # Mock the actual binary download content
+        # Mock the binary download stream
         mock_download_res = MagicMock()
-        mock_download_res.content = b"binary_payload"
+        mock_download_res.content = b"FLUID_DYNAMICS_DATA_V1"
         mock_dbx.files_download.return_value = (None, mock_download_res)
 
-        # 4. Execute Sync (using your actual method signature)
+        # 4. Execute Sync (Source: /projects/oceans)
         ingestor.sync(
-            source_folder="/sim_v1", 
-            target_folder=mock_io_env["data_dir"], 
+            source_folder="/projects/oceans", 
+            target_folder=cloud_env["data_dir"], 
             allowed_ext=[".h5"]
         )
         
-        # 5. Verification: Did it reconstruct the path 'sim_v1/outputs/data.h5'?
-        # Note: In your code, relpath is calculated from source_folder
-        target_file = Path(mock_io_env["data_dir"]) / "outputs" / "data.h5"
-        assert target_file.exists()
-        assert target_file.read_bytes() == b"binary_payload"
+        # 5. Verification: Path reconstruction check
+        # Expected local: data/testing-input-output/outputs/simulation_results.h5
+        target_file = Path(cloud_env["data_dir"]) / "outputs" / "simulation_results.h5"
+        
+        assert target_file.exists(), f"Failed to reconstruct path at {target_file}"
+        assert target_file.read_bytes() == b"FLUID_DYNAMICS_DATA_V1"
 
-def test_token_expiry_recovery(mock_io_env):
+def test_token_handshake_on_init(cloud_env):
     """
-    Scenario: Token Refresh Handshake
-    Verifies that CloudIngestor utilizes TokenManager to refresh sessions.
-    Compliance: Rule 5 (Deterministic Init).
+    Scenario: Deterministic Initialization (Rule 5)
+    Verifies that CloudIngestor refreshes the token immediately upon instantiation.
     """
     mock_tm = MagicMock(spec=TokenManager)
-    mock_tm.refresh_access_token.return_value = "new_valid_token"
+    mock_tm.refresh_access_token.return_value = "fresh_session_token"
     
     with patch('dropbox.Dropbox') as mock_dbx_cls:
-        # Trigger initialization
         CloudIngestor(
             token_manager=mock_tm, 
-            refresh_token=mock_io_env["refresh_token"], 
-            log_path=mock_io_env["log_file"]
+            refresh_token=cloud_env["refresh_token"], 
+            log_path=cloud_env["log_file"]
         )
         
-        # Logic: Refresh MUST have been called during __init__
-        mock_tm.refresh_access_token.assert_called_with(mock_io_env["refresh_token"])
-        # Logic: Dropbox client initialized with the new token
-        mock_dbx_cls.assert_called_once_with("new_valid_token")
+        # Logic: Must refresh using the provided secret
+        mock_tm.refresh_access_token.assert_called_with(cloud_env["refresh_token"])
+        # Logic: Dropbox client must be initialized with the resulting short-lived token
+        mock_dbx_cls.assert_called_once_with("fresh_session_token")
 
-def test_extension_filtering(mock_io_env):
+def test_extension_security_gate(cloud_env):
     """
-    Verifies the Archivist only ingests relevant simulation artifacts (.h5, .zip).
+    Scenario: Extension Filtering
+    Verifies the Ingestor ignores non-simulation files (Rule 1: Precision).
     """
     mock_tm = MagicMock(spec=TokenManager)
     mock_tm.refresh_access_token.return_value = "token"
     
     with patch('dropbox.Dropbox') as mock_dbx_cls:
         mock_dbx = mock_dbx_cls.return_value
-        ingestor = CloudIngestor(mock_tm, "ref", mock_io_env["log_file"])
+        ingestor = CloudIngestor(mock_tm, "ref", cloud_env["log_file"])
         
-        import dropbox
-        # File 1: Allowed (.zip)
+        # File A: Valid Physics Artifact
         f1 = MagicMock(spec=dropbox.files.FileMetadata)
-        f1.name = "results.zip"
-        f1.path_lower = "/results.zip"
+        f1.name = "mesh_v1.zip"
+        f1.path_lower = "/mesh_v1.zip"
         
-        # File 2: Forbidden (.txt)
+        # File B: Malicious or Irrelevant script
         f2 = MagicMock(spec=dropbox.files.FileMetadata)
-        f2.name = "noise.txt"
-        f2.path_lower = "/noise.txt"
+        f2.name = "install.sh"
+        f2.path_lower = "/install.sh"
         
         mock_result = MagicMock()
         mock_result.entries = [f1, f2]
         mock_result.has_more = False
         mock_dbx.files_list_folder.return_value = mock_result
         
-        # Mock download response
         mock_res = MagicMock()
-        mock_res.content = b"data"
+        mock_res.content = b"ZIP_DATA"
         mock_dbx.files_download.return_value = (None, mock_res)
 
-        # Execute
-        ingestor.sync("/", mock_io_env["data_dir"], [".zip"])
+        # Execute Sync allowing only .zip
+        ingestor.sync("/", cloud_env["data_dir"], [".zip"])
         
         # Verification
-        assert (Path(mock_io_env["data_dir"]) / "results.zip").exists()
-        assert not (Path(mock_io_env["data_dir"]) / "noise.txt").exists()
+        assert (Path(cloud_env["data_dir"]) / "mesh_v1.zip").exists()
+        assert not (Path(cloud_env["data_dir"]) / "install.sh").exists()
 
-def test_init_failure_hard_halt(mock_io_env):
+def test_auth_failure_hard_halt(cloud_env):
     """
-    Scenario: Auth Failure (Rule 4 Compliance)
-    Verifies that the engine performs a Hard-Halt if the token cannot be refreshed.
+    Scenario: Zero-Default Policy (Rule 4)
+    Verifies that a failed token refresh triggers a Hard-Halt.
     """
     mock_tm = MagicMock(spec=TokenManager)
-    # Simulate a critical auth failure
-    mock_tm.refresh_access_token.side_effect = RuntimeError("Invalid Grant")
+    # Simulate a "Grant Expired" or "Network Down" scenario
+    mock_tm.refresh_access_token.side_effect = RuntimeError("CLOUD_AUTH_DENIED")
     
-    with pytest.raises(RuntimeError, match="Invalid Grant"):
-        CloudIngestor(mock_tm, "bad_token", mock_io_env["log_file"])
+    with pytest.raises(RuntimeError, match="CLOUD_AUTH_DENIED"):
+        CloudIngestor(mock_tm, "expired_token", cloud_env["log_file"])

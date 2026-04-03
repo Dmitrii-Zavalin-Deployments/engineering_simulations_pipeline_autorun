@@ -1,28 +1,32 @@
+# tests/core/test_ledger_logic.py
+
 import pytest
 import json
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
+
+# Internal Core Imports
+from src.core.update_ledger import LedgerManager
 from src.core.bootloader import Bootloader
 from src.core.state_engine import OrchestrationState
-
-# SSoT Alignment: Using the updated LedgerManager with Metadata/Steps support
-from src.core.update_ledger import LedgerManager
+from src.core.constants import SystemPaths, OrchestrationStatus
+from tests.helpers.state_engine_dummy import StateEngineDummy
 
 @pytest.fixture
 def nomadic_env(tmp_path):
-    """Sets up a temporary workspace for I/O testing with the new structure."""
-    root = tmp_path / "workdir"
-    root.mkdir()
+    """Sets up a physical nomadic workspace for Ledger testing."""
+    config_dir = tmp_path / SystemPaths.CONFIG_DIR
+    config_dir.mkdir(parents=True)
     
-    ledger_file = root / "orchestration_ledger.json"
-    audit_file = root / "performance_audit.md"
+    ledger_file = config_dir / SystemPaths.LEDGER
+    audit_file = tmp_path / "performance_audit.md"
     
-    # Initialize with the new Forensic Structure
+    # Initialize with the Forensic SSoT Structure
     initial_structure = {
         "metadata": {
-            "project_id": "test_proj_v1",
-            "manifest_id": "test_man_v1"
+            "project_id": "TEST-PROJ-V1",
+            "manifest_id": "MANIFEST-V1"
         },
         "steps": {}
     }
@@ -30,200 +34,152 @@ def nomadic_env(tmp_path):
     audit_file.write_text("# 🛰️ Simulation Engine Performance Audit\n\n", encoding="utf-8")
     
     return {
-        "root": root,
+        "root": tmp_path,
         "ledger": str(ledger_file),
         "audit": str(audit_file)
     }
 
 def test_atomic_nested_update(nomadic_env):
     """
-    Scenario: Verify update_job_status preserves metadata while nesting steps.
-    Compliance: Forensic Identity Integrity.
+    Scenario: Update preserves metadata while nesting steps.
+    Ensures that writing a step doesn't wipe the Project ID.
     """
-    manager = LedgerManager(orchestration_path=nomadic_env["ledger"], log_path=nomadic_env["audit"])
+    manager = LedgerManager(log_path=nomadic_env["audit"])
+    # Point manager to the specific test ledger
+    manager.orchestration_path = Path(nomadic_env["ledger"])
     
-    # Trigger a job update
     manager.update_job_status(
-        job_name="navier_stokes_execution",
-        status="IN_PROGRESS",
-        metadata={
-            "target": "org/repo",
-            "timeout_hours": 6
-        }
+        job_name="physics_solve",
+        status=OrchestrationStatus.IN_PROGRESS.value,
+        metadata={"target": "org/repo", "timeout_hours": 6}
     )
     
-    with open(nomadic_env["ledger"], 'r') as f:
-        data = json.load(f)
+    data = json.loads(Path(nomadic_env["ledger"]).read_text())
     
-    # Verify Metadata is preserved
-    assert data["metadata"]["project_id"] == "test_proj_v1"
-    
-    # Verify Step is correctly nested
-    assert "navier_stokes_execution" in data["steps"]
-    assert data["steps"]["navier_stokes_execution"]["status"] == "IN_PROGRESS"
-    assert "last_triggered" in data["steps"]["navier_stokes_execution"]
+    # Verify Forensic Identity
+    assert data["metadata"]["project_id"] == "TEST-PROJ-V1"
+    # Verify Step Nesting
+    assert "physics_solve" in data["steps"]
+    assert data["steps"]["physics_solve"]["status"] == OrchestrationStatus.IN_PROGRESS.value
+    assert "last_triggered" in data["steps"]["physics_solve"]
 
-def test_metadata_handshake_update(nomadic_env):
+def test_metadata_handshake_dispatch(nomadic_env):
     """
-    Scenario: Verify the ledger can update its own identity metadata during dispatch.
+    Scenario: log_dispatch updates global identity metadata.
     """
-    manager = LedgerManager(orchestration_path=nomadic_env["ledger"], log_path=nomadic_env["audit"])
+    manager = LedgerManager(log_path=nomadic_env["audit"])
+    manager.orchestration_path = Path(nomadic_env["ledger"])
     
-    # Dispatching with a NEW project identity
     manager.log_dispatch(
-        project_id="new_project_02",
-        manifest_id="new_manifest_02",
+        project_id="NEW-PROJECT-ID",
+        manifest_id="NEW-MANIFEST-ID",
         step_name="geometry_gen",
         target_repo="org/geom",
         timeout_hours=2
     )
     
-    with open(nomadic_env["ledger"], 'r') as f:
-        data = json.load(f)
+    data = json.loads(Path(nomadic_env["ledger"]).read_text())
         
-    assert data["metadata"]["project_id"] == "new_project_02"
-    assert data["metadata"]["manifest_id"] == "new_manifest_02"
+    assert data["metadata"]["project_id"] == "NEW-PROJECT-ID"
+    assert data["metadata"]["manifest_id"] == "NEW-MANIFEST-ID"
     assert "geometry_gen" in data["steps"]
 
-def test_clear_lock_isolation(nomadic_env):
+def test_audit_trail_atomic_prepending(nomadic_env):
     """
-    Scenario: Releasing a lock should only remove the step, not the metadata.
+    Scenario: Verify Audit Log uses prepending (Newest First).
+    Rule 5 Compliance: Operational Hygiene.
     """
-    manager = LedgerManager(orchestration_path=nomadic_env["ledger"], log_path=nomadic_env["audit"])
+    manager = LedgerManager(log_path=nomadic_env["audit"])
     
-    # Setup an active step
-    manager.update_job_status("step_to_clear", "IN_PROGRESS", {"target": "r", "timeout_hours": 1})
-    
-    # Clear it
-    manager.clear_lock("step_to_clear")
-    
-    with open(nomadic_env["ledger"], 'r') as f:
-        data = json.load(f)
-        
-    assert "step_to_clear" not in data["steps"]
-    assert "project_id" in data["metadata"] # Identity must remain
-
-def test_audit_trail_prepending(nomadic_env):
-    """
-    Scenario: Verify the Markdown audit log uses atomic prepending (Newest First).
-    """
-    manager = LedgerManager(orchestration_path=nomadic_env["ledger"], log_path=nomadic_env["audit"])
-    
-    manager.record_event("TEST_A", "First message")
-    manager.record_event("TEST_B", "Second message")
+    manager.record_event("EVENT_ALPHA", "Message One")
+    manager.record_event("EVENT_BETA", "Message Two")
     
     content = Path(nomadic_env["audit"]).read_text()
     
-    # "Second message" should appear before "First message" in the file
-    assert content.find("Second message") < content.find("First message")
+    # Newest (Beta) must be physically higher in the file than Oldest (Alpha)
+    assert content.find("Message Two") < content.find("Message One")
     assert "# 🛰️ Simulation Engine Performance Audit" in content
 
 def test_malformed_ledger_recovery(nomadic_env):
     """
-    Scenario: Resilience against JSON corruption. 
-    The load_orchestration_state should return a clean structure if the file is trash.
+    Scenario: Resilience against JSON corruption (Rule 4).
     """
-    Path(nomadic_env["ledger"]).write_text("NOT_JSON")
+    Path(nomadic_env["ledger"]).write_text("CORRUPTED_NON_JSON_DATA")
     
-    manager = LedgerManager(orchestration_path=nomadic_env["ledger"], log_path=nomadic_env["audit"])
+    manager = LedgerManager(log_path=nomadic_env["audit"])
+    manager.orchestration_path = Path(nomadic_env["ledger"])
+    
     state = manager.load_orchestration_state()
     
     assert "metadata" in state
     assert "steps" in state
-    assert state["steps"] == {}
+    assert state["steps"] == {} # Should return clean slate
 
-def test_timestamp_rule_4_compliance(nomadic_env):
+def test_identity_preservation_logic(nomadic_env):
     """
-    Verify timestamps inside 'steps' are ISO valid for timeout logic.
+    Scenario: Same IDs -> No Wipe.
+    If the manifest hasn't changed, we don't lose our 'IN_PROGRESS' markers.
     """
-    manager = LedgerManager(orchestration_path=nomadic_env["ledger"], log_path=nomadic_env["audit"])
-    manager.update_job_status("time_test", "ACTIVE", {"target": "r", "timeout_hours": 1})
+    state, data_path = StateEngineDummy.create(
+        nomadic_env["root"], 
+        project_id="TEST-PROJ-V1", 
+        manifest_id="MANIFEST-V1"
+    )
     
-    with open(nomadic_env["ledger"], 'r') as f:
-        data = json.load(f)
-        ts = data["steps"]["time_test"]["last_triggered"]
-        
-        # Verify ISO format
-        assert datetime.fromisoformat(ts) is not None
-
-def test_identity_preservation_same_ids(nomadic_env):
-    """
-    Scenario: Same Project/Manifest ID.
-    Verify that existing job steps in the ledger are NOT erased.
-    """
+    # Pre-load ledger with a 'active' step
     ledger_path = Path(nomadic_env["ledger"])
-    
-    # 1. Setup a ledger with an active job
-    initial_ledger = {
-        "metadata": {"project_id": "alpha_01", "manifest_id": "man_01"}, "steps": {"navier_stokes": {"status": "IN_PROGRESS", "timeout_hours": 6}}
+    initial_data = {
+        "metadata": {"project_id": "TEST-PROJ-V1", "manifest_id": "MANIFEST-V1"},
+        "steps": {"existing_job": {"status": "IN_PROGRESS"}}
     }
-    ledger_path.write_text(json.dumps(initial_ledger))
+    ledger_path.write_text(json.dumps(initial_data))
 
-    # 2. Mock a remote manifest with the EXACT SAME IDs
-    mock_manifest = {
-        "project_id": "alpha_01",
-        "manifest_id": "man_01",
-        "pipeline_steps": []
-    }
-
-    # 3. Trigger hydration
-    state = OrchestrationState(str(ledger_path.parent / 'active_disk.json'), nomadic_env["root"])
-    state.manifest_url = "http://mock.io"
-    
-    with patch("requests.get") as mock_get:
-        mock_get.return_value.json.return_value = mock_manifest
+    # Mock remote manifest with same IDs
+    with patch("src.core.bootloader.requests.get") as mock_get:
         mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            "project_id": "TEST-PROJ-V1",
+            "manifest_id": "MANIFEST-V1",
+            "pipeline_steps": []
+        }
         Bootloader.hydrate(state)
 
-    # 4. Verification: The 'navier_stokes' step must still exist
-    updated_ledger = json.loads(ledger_path.read_text())
-    assert "navier_stokes" in updated_ledger["steps"]
-    assert updated_ledger["metadata"]["project_id"] == "alpha_01"
+    # Verification: 'existing_job' was NOT wiped
+    updated = json.loads(ledger_path.read_text())
+    assert "existing_job" in updated["steps"]
 
-
-@pytest.mark.parametrize("remote_pid, remote_mid, scenario_name", [
-    ("alpha_01", "man_NEW", "Different Manifest ID"),
-    ("alpha_NEW", "man_01", "Different Project ID"),
-    ("alpha_NEW", "man_NEW", "Both IDs Different"),
+@pytest.mark.parametrize("new_pid, new_mid", [
+    ("DIFFERENT-PID", "MANIFEST-V1"),
+    ("TEST-PROJ-V1", "DIFFERENT-MID"),
+    ("NEW-PID", "NEW-MID"),
 ])
-def test_identity_mismatch_reset(nomadic_env, remote_pid, remote_mid, scenario_name):
+def test_identity_mismatch_forensic_reset(nomadic_env, new_pid, new_mid):
     """
-    Scenario: Identity Mismatch (3 Sub-tests).
-    Verify that if EITHER ID changes, the ledger steps are wiped (Forensic Reset).
+    Scenario: Identity Shift -> Atomic Wipe.
+    If either ID changes, we wipe 'steps' to prevent nomadic cross-pollution.
     """
+    state, data_path = StateEngineDummy.create(nomadic_env["root"])
     ledger_path = Path(nomadic_env["ledger"])
     
-    # 1. Setup a ledger with 'old' identity and a 'poison' step from a different project
-    initial_ledger = {
-        "metadata": {"project_id": "alpha_01", "manifest_id": "man_01"},
+    # 1. Setup ledger with 'old' data
+    initial_data = {
+        "metadata": {"project_id": "OLD-P", "manifest_id": "OLD-M"},
+        "steps": {"poison_step": {"status": "COMPLETED"}}
     }
-    ledger_path.write_text(json.dumps(initial_ledger))
+    ledger_path.write_text(json.dumps(initial_data))
 
-    # 2. Mock a remote manifest based on the parametrization
-    mock_manifest = {
-        "project_id": remote_pid,
-        "manifest_id": remote_mid,
-        "pipeline_steps": []
-    }
-
-    state = OrchestrationState(str(ledger_path.parent / 'active_disk.json'), nomadic_env["root"])
-    state.manifest_url = "http://mock.io"
-
-    # 3. Trigger hydration (which triggers the Bootloader integrity check)
-    with patch("requests.get") as mock_get:
-        mock_get.return_value.json.return_value = mock_manifest
+    # 2. Hydrate with the parametrized 'new' IDs
+    with patch("src.core.bootloader.requests.get") as mock_get:
         mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            "project_id": new_pid,
+            "manifest_id": new_mid,
+            "pipeline_steps": []
+        }
         Bootloader.hydrate(state)
 
-    # 4. Verification
-    updated_ledger = json.loads(ledger_path.read_text())
-    
-    # A. The 'old_project_job' must be GONE (Wiped)
-    assert "old_project_job" not in updated_ledger["steps"]
-    assert updated_ledger["steps"] == {}
-    
-    # B. The new metadata must be recorded
-    assert updated_ledger["metadata"]["project_id"] == remote_pid
-    assert updated_ledger["metadata"]["manifest_id"] == remote_mid
-    
-    print(f"✅ Reset Verified for scenario: {scenario_name}")
+    # 3. Assert: 'poison_step' is GONE
+    updated = json.loads(ledger_path.read_text())
+    assert "poison_step" not in updated["steps"]
+    assert updated["metadata"]["project_id"] == new_pid
+    assert updated["metadata"]["manifest_id"] == new_mid

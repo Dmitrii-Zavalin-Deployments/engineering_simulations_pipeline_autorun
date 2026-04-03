@@ -2,72 +2,93 @@
 
 import pytest
 import json
-from src.core.state_engine import OrchestrationState
+from src.core.constants import OrchestrationStatus
+from tests.helpers.state_engine_dummy import StateEngineDummy
 
 @pytest.fixture
-def future_engine_setup(tmp_path):
-    """Sets up an Agnostic Engine instance with a future-project manifest."""
-    config = tmp_path / "active_disk.json"
-    config.write_text(json.dumps({
-        "project_id": "future_project_x", 
-        "manifest_url": "http://nomadic-storage.io/x.json"
-    }))
+def future_proof_env(tmp_path):
+    """
+    Sets up an Agnostic Engine instance with a hypothetical 'Future Project'.
+    This project uses 'Quantum' terminology to prove the engine is domain-blind.
+    """
+    future_steps = [
+        {
+            "name": "quantum_init",
+            "requires": ["initial_seed.dat"],
+            "produces": ["quantum_state.bin"],
+            "target_repo": "org/quantum-worker",
+            "timeout_hours": 1
+        }
+    ]
     
-    # Mock Schema for compliance
-    schema_dir = tmp_path / "config"
-    schema_dir.mkdir()
-    (schema_dir / "core_schema.json").write_text(json.dumps({"type": "object"}))
-    
-    # The 'Dummy Disc' Manifest
-    future_manifest = {
-        "manifest_id": "v99_experimental",
-        "pipeline_steps": [
-            {
-                "name": "quantum_init",
-                "requires": ["initial_seed.dat"],
-                "produces": ["quantum_state.bin"],
-                "target_repo": "org/quantum-worker"
-            }
-        ]
-    }
-    
-    data_dir = tmp_path / "data"
-    state = OrchestrationState(str(config), str(data_dir))
-    state.schema_path = schema_dir / "core_schema.json"
-    state.hydrate_manifest(future_manifest)
-    return state
+    # Use the dummy factory to create a 'Future Project X' environment
+    state, data_path = StateEngineDummy.create(
+        tmp_path, 
+        project_id="FUTURE-PROJECT-X", 
+        steps=future_steps
+    )
+    return state, data_path
 
-def test_dummy_disc_agnostic_execution(future_engine_setup):
+def test_agnostic_logic_execution(future_proof_env):
     """
-    SCENARIO 1: The 'Dummy Disc' Test.
-    The Engine must process 'future_project_x' without any specific 
-    knowledge of the physics or domain.
+    SCENARIO: The 'Agnostic' Test.
+    The Engine must identify 'quantum_init' purely based on the presence 
+    of 'initial_seed.dat', without any hardcoded knowledge of the project.
     """
-    # 1. Provide the requirement for the future step
-    (future_engine_setup.data_path / "initial_seed.dat").write_text("010101")
+    state, data_path = future_proof_env
     
-    # 2. Trigger Scan
-    steps = future_engine_setup.forensic_artifact_scan({})
-    step = steps[0] if steps else None
+    # 1. Arrange: Provide the physical requirement for the future step
+    (data_path / "initial_seed.dat").write_text("QUANTUM_ENTROPY_0101", encoding="utf-8")
     
-    # 3. Verify the Engine identified the future step based on Logic alone
-    assert step['name'] == "quantum_init"
-    assert step['target_repo'] == "org/quantum-worker"
-    print("\n✅ Agnostic Execution Verified: Future Project X correctly identified.")
+    # 2. Act: Reconcile (Heal) and Get Ready Steps
+    # We start with an empty ledger to force a forensic reconstruction
+    healed_ledger = state.reconcile_and_heal({})
+    ready_steps = state.get_ready_steps(healed_ledger)
+    
+    # 3. Assert: Logic-Driven Identification
+    assert ready_steps is not None
+    assert ready_steps[0]["name"] == "quantum_init"
+    assert ready_steps[0]["target_repo"] == "org/quantum-worker"
+    
+    # Verify the status is PENDING (Ready for dispatch)
+    assert healed_ledger["quantum_init"]["status"] == OrchestrationStatus.PENDING.value
 
-def test_conflict_simulation_hard_halt(future_engine_setup):
+def test_sync_failure_hard_halt(future_proof_env):
     """
-    SCENARIO 2: Conflict Simulation (Broken Sync).
-    If a file is missing due to a Dropbox sync failure, the Engine
-    must return None (Halt) rather than moving forward.
+    SCENARIO: Conflict Simulation (Broken Sync / Missing Artifact).
+    Rule 4 Compliance: If a file is missing (e.g., Dropbox sync lag),
+    the Engine must stay in WAITING/FAILED rather than moving forward.
     """
-    # 1. Ensure the directory is empty (Simulating a sync that never happened)
-    # No 'initial_seed.dat' exists.
+    state, data_path = future_proof_env
     
-    # 2. Trigger Scan
-    steps = future_engine_setup.forensic_artifact_scan({})
-    step = steps[0] if steps else None
+    # 1. Arrange: The directory is empty. 'initial_seed.dat' DOES NOT EXIST.
+    # Ledger claims it should be ready.
+    ledger = {"quantum_init": {"status": OrchestrationStatus.WAITING.value}}
     
-    # 3. Verify Hard-Halt (No step should be triggered)
-    assert step is None
-    print("\n✅ Hard-Halt Verified: Engine refused to proceed with missing artifacts.")
+    # 2. Act: Reconcile
+    healed_ledger = state.reconcile_and_heal(ledger)
+    ready_steps = state.get_ready_steps(healed_ledger)
+    
+    # 3. Assert: Physical Truth Prevails
+    # Even though it's WAITING, it cannot go PENDING because the input is missing.
+    assert healed_ledger["quantum_init"]["status"] == OrchestrationStatus.WAITING.value
+    assert ready_steps is None
+    
+def test_future_saturation_check(future_proof_env):
+    """
+    SCENARIO: Future Saturation.
+    Verifies that even a 'Quantum' project correctly identifies completion
+    when the final artifact is detected.
+    """
+    state, data_path = future_proof_env
+    
+    # 1. Arrange: Place the 'future' output file
+    (data_path / "quantum_state.bin").write_text("STABLE_WAVEFUNCTION", encoding="utf-8")
+    
+    # 2. Act
+    healed_ledger = state.reconcile_and_heal({})
+    ready_steps = state.get_ready_steps(healed_ledger)
+    
+    # 3. Assert: Saturation Reached
+    assert healed_ledger["quantum_init"]["status"] == OrchestrationStatus.COMPLETED.value
+    assert ready_steps is None

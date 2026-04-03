@@ -2,113 +2,131 @@
 
 import pytest
 import json
-import os
-from unittest.mock import patch
-from jsonschema import ValidationError
+import time
+from pathlib import Path
 from src.core.bootloader import Bootloader
-
-# Assuming your source is in the python path
 from src.core.state_engine import OrchestrationState
+from src.core.constants import SystemPaths
+from tests.helpers.state_engine_dummy import StateEngineDummy
 
 @pytest.fixture
-def fake_foundation(tmp_path):
-    """Creates a temporary directory structure for nomadic testing."""
-    d = tmp_path / "project_root"
-    d.mkdir()
-    data_dir = fake_foundation["root"] / "data"
-    data_dir.mkdir()
+def boot_env(tmp_path):
+    """
+    Creates the physical environment for boot testing.
+    Uses the dummy factory to ensure schema and paths are correct.
+    """
+    state, data_path = StateEngineDummy.create(tmp_path)
     
-    # Create a valid active_disk.json
-    active_disk = fake_foundation["root"] / "active_disk.json"
-    manifest_data = {
-        "project_id": "navier-stokes-test",
-        "version": "1.0.0",
-        "pipeline_steps": [
-            {
-                "step_name": "geometry_generation",
-                "target_repo": "geometry-gen-repo",
-                "timeout_hours": 2,
-                "inputs": [],
-                "outputs": ["geometry.msh"]
-            }
-        ]
-    }
-    active_disk.write_text(json.dumps(manifest_data))
-    
-    # Create a dummy audit file
-    audit_file = fake_foundation["root"] / "performance_audit.md"
-    audit_file.write_text("# Performance Audit Log\n")
+    config_dir = tmp_path / SystemPaths.CONFIG_DIR
+    active_disk = config_dir / SystemPaths.ACTIVE_DISK
+    dormant_flag = config_dir / SystemPaths.DORMANT_FLAG
     
     return {
-        "root": d,
+        "root": tmp_path,
+        "config_dir": config_dir,
         "active_disk": active_disk,
-        "audit": audit_file,
-        "manifest_content": manifest_data
+        "dormant_flag": dormant_flag,
+        "data_path": data_path
     }
 
-def test_clean_wakeup_hydration(fake_foundation):
+def test_clean_wakeup_mounting(boot_env):
     """
     Scenario: Clean Wake-Up
-    Verifies that OrchestrationState hydrates and records the event.
+    Verifies that Bootloader.mount returns a valid OrchestrationState.
     """
-    with patch('src.core.bootloader.Bootloader.hydrate') as mock_fetch:
-        # Simulate local disk pointing to a manifest
-        mock_fetch.return_value = fake_foundation["manifest_content"]
-        
-        state = Bootloader.mount(str(fake_foundation["root"] / "missing.json"), str(fake_foundation["root"]))
-        
-        assert isinstance(state, OrchestrationState)
-        assert state.project_id == "navier-stokes-test"
-        
-        # Verify Audit Log entry
-        audit_content = fake_foundation["audit"].read_text()
-        assert "📥 HYDRATION" in audit_content
+    state = Bootloader.mount(
+        str(boot_env["active_disk"]), 
+        str(boot_env["data_path"])
+    )
+    
+    assert isinstance(state, OrchestrationState)
+    assert state.project_id == "TEST-PROJECT"
+    assert state.data_path == boot_env["data_path"]
 
-def test_auto_wake_trigger(fake_foundation):
+def test_auto_wake_logic(boot_env):
     """
     Scenario: Auto-Wake Trigger
-    Verifies that a new timestamp on active_disk.json clears the dormant flag.
+    Verifies that a newer active_disk.json flips DORMANT to ACTIVE.
     """
-    root = fake_foundation["root"]
-    dormant_flag = root / "dormant.flag"
-    dormant_flag.write_text("STATUS: DORMANT")
+    # 1. Set engine to DORMANT
+    boot_env["dormant_flag"].write_text("STATUS: DORMANT", encoding="utf-8")
     
-    os.utime(str(fake_foundation["root"] / "missing.json"), (os.path.getatime(dormant_flag) + 100,
-                                             os.path.getmtime(dormant_flag) + 100))
+    # 2. Ensure active_disk has a newer timestamp (Shift forward 2 seconds)
+    new_time = time.time() + 2
+    import os
+    os.utime(boot_env["active_disk"], (new_time, new_time))
     
-    # Bootloader is static
-    Bootloader.mount(str(fake_foundation["root"] / "missing.json"), str(fake_foundation["root"]))
+    # 3. Mount
+    Bootloader.mount(str(boot_env["active_disk"]), str(boot_env["data_path"]))
     
-    # Expectation: Flag is removed or set to ACTIVE
-    assert not dormant_flag.exists() or "ACTIVE" in dormant_flag.read_text()
+    # 4. Assert: Status is now ACTIVE
+    content = boot_env["dormant_flag"].read_text(encoding="utf-8")
+    assert "ACTIVE" in content
 
-def test_poisoned_manifest_schema_enforcement(fake_foundation):
+def test_poisoned_manifest_schema_gate(boot_env):
     """
     Scenario: Poisoned Manifest (Schema Enforcement)
-    Verifies that missing mandatory keys trigger a Hard-Halt (ValidationError).
+    Verifies that a malformed manifest triggers a Hard-Halt during hydration.
     """
-    # Create invalid manifest (missing 'pipeline_steps')
+    state = Bootloader.mount(str(boot_env["active_disk"]), str(boot_env["data_path"]))
+    
+    # Poisoned data: missing mandatory 'pipeline_steps'
     poisoned_data = {
-        "project_id": "broken-project",
-        "version": "1.0.0"
+        "manifest_id": "FAIL-001",
+        "project_id": "POISON-PROJECT"
         # MISSING pipeline_steps
     }
     
-    with patch('src.core.bootloader.Bootloader.hydrate') as mock_fetch:
-        mock_fetch.return_value = poisoned_data
-        
-        
-        # Expectation: jsonschema.validate (or your internal check) raises error
-        with pytest.raises(ValidationError):
-            Bootloader.mount(str(fake_foundation["root"] / "missing.json"), str(fake_foundation["root"]))
+    # We expect a RuntimeError because hydrate_manifest wraps the ValidationError 
+    # and provides the "❌ CRITICAL: Hard-Halt" message.
+    with pytest.raises(RuntimeError) as excinfo:
+        state.hydrate_manifest(poisoned_data)
+    
+    assert "Manifest is corrupt" in str(excinfo.value)
 
-def test_missing_foundation_halt(fake_foundation):
+def test_missing_config_halt(boot_env):
     """
     Scenario: Missing Foundation
-    Engine must crash if active_disk.json is not found.
+    Engine must raise RuntimeError if active_disk.json is not found.
     """
+    missing_path = boot_env["config_dir"] / "non_existent.json"
     
-    # Bootloader is static
+    with pytest.raises(RuntimeError) as excinfo:
+        Bootloader.mount(str(missing_path), str(boot_env["data_path"]))
     
-    with pytest.raises(FileNotFoundError):
-        Bootloader.mount(str(fake_foundation["root"] / "missing.json"), str(fake_foundation["root"]))
+    assert "Mounting Failed" in str(excinfo.value)
+
+def test_ledger_wipe_on_project_shift(boot_env):
+    """
+    Scenario: Project ID Mismatch
+    Verifies that if the remote manifest ID differs from the local ledger,
+    the ledger is wiped to prevent data pollution.
+    """
+    # 1. Create a "stale" ledger for a different project
+    ledger_path = boot_env["config_dir"] / SystemPaths.LEDGER
+    stale_ledger = {
+        "metadata": {"project_id": "OLD-PROJECT", "manifest_id": "OLD-MID"},
+        "steps": {"old_step": {"status": "COMPLETED"}}
+    }
+    ledger_path.write_text(json.dumps(stale_ledger), encoding="utf-8")
+    
+    # 2. Setup state
+    state = Bootloader.mount(str(boot_env["active_disk"]), str(boot_env["data_path"]))
+    
+    # 3. Hydrate with NEW manifest IDs (from the dummy: TEST-PROJECT / MANIFEST-001)
+    # This requires mocking the network response for Bootloader.hydrate
+    import requests_mock
+    with requests_mock.Mocker() as m:
+        new_manifest = {
+            "project_id": "TEST-PROJECT",
+            "manifest_id": "MANIFEST-001",
+            "pipeline_steps": []
+        }
+        m.get(state.manifest_url, json=new_manifest)
+        
+        Bootloader.hydrate(state)
+    
+    # 4. Verify Ledger was wiped and updated with new IDs
+    updated_ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert updated_ledger["metadata"]["project_id"] == "TEST-PROJECT"
+    assert "old_step" not in updated_ledger["steps"]

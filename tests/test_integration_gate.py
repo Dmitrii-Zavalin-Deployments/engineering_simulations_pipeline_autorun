@@ -5,11 +5,15 @@ import json
 import os
 import logging
 from unittest.mock import patch, MagicMock
+from pathlib import Path
+
+# Internal Core Imports
 from src.core.state_engine import OrchestrationState
 from src.api.github_trigger import Dispatcher
+from src.core.constants import OrchestrationStatus, SystemPaths
+from tests.helpers.state_engine_dummy import StateEngineDummy
 
-# Ensure logger is visible during test output if needed
-logger = logging.getLogger("Engine.Test")
+logger = logging.getLogger("Engine.Test.Integration")
 
 ## ==========================================================
 ## TIER 1: THE "CORRUPT DISC" GATE (Validation Integrity)
@@ -17,19 +21,20 @@ logger = logging.getLogger("Engine.Test")
 
 def test_system_tier_schema_enforcement(tmp_path):
     """
-    VERIFICATION: Engine must Hard-Halt if the manifest violates the Sovereign Schema.
-    This guarantees that the 'Console' won't attempt to play a 'Damaged Disc'.
+    VERIFICATION: Sovereign Schema Enforcement.
+    The Engine must Hard-Halt if the manifest violates the local JSON schema.
+    This prevents the nomadic node from executing a 'Damaged Disc'.
     """
-    # 1. Setup temporary environment
-    config = tmp_path / "active_disk.json"
-    config.write_text(json.dumps({"project_id": "P-001", "manifest_url": "http://mock.io/v1"}))
+    # 1. Setup physical env with dummy factory
+    state, data_path = StateEngineDummy.create(tmp_path)
     
-    # 2. Create an invalid manifest (missing required 'pipeline_steps' per core_schema.json)
-    invalid_manifest = {"manifest_id": "M-999", "project_id": "P-001"}
+    # 2. Poison the manifest: missing 'manifest_id' and 'pipeline_steps'
+    invalid_manifest = {
+        "project_id": "P-001",
+        "random_noise": "invalid_data"
+    }
     
-    state = OrchestrationState(str(config), str(tmp_path))
-    
-    # 3. Assert Hard-Halt logic
+    # 3. Assert Hard-Halt (Rule 4 Compliance)
     with pytest.raises(RuntimeError, match="Hard-Halt"):
         state.hydrate_manifest(invalid_manifest)
 
@@ -40,38 +45,31 @@ def test_system_tier_schema_enforcement(tmp_path):
 
 def test_system_tier_gap_resolution(tmp_path):
     """
-    VERIFICATION: Engine identifies the exact artifact gap based on existence.
-    Checks the 'Horizontal Integrity Mandate'—it is blind to file content.
+    VERIFICATION: Physics-Agnostic Gap Detection.
+    Verifies the engine identifies the artifact gap based on existence alone.
     """
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
+    # 1. Setup 1-step pipeline
+    steps = [{
+        "name": "ProcessData",
+        "target_repo": "org/processor-worker",
+        "requires": ["input_sensor.bin"],
+        "produces": ["output_report.pdf"],
+        "timeout_hours": 1
+    }]
+    state, data_path = StateEngineDummy.create(tmp_path, steps=steps)
     
-    # 1. Simulate 'Physics-Agnostic' presence: Input exists, Output does not.
-    (data_dir / "input_sensor.bin").write_text("dummy_binary_data") 
+    # 2. Arrange: Input exists, Output does NOT
+    (data_path / "input_sensor.bin").write_text("DUMMY_BINARY", encoding="utf-8") 
     
-    # 2. Valid Manifest defining the Gate
-    manifest = {
-        "manifest_id": "M-001",
-        "pipeline_steps": [{
-            "name": "ProcessData",
-            "target_repo": "org/processor-worker",
-            "requires": ["input_sensor.bin"],
-            "produces": ["output_report.pdf"]
-        }]
-    }
+    # 3. Act: Run the Forensic Loop
+    healed = state.reconcile_and_heal({})
+    ready = state.get_ready_steps(healed)
     
-    config = tmp_path / "active_disk.json"
-    config.write_text(json.dumps({"project_id": "P-001", "manifest_url": "http://mock.io"}))
-    
-    state = OrchestrationState(str(config), str(data_dir))
-    state.hydrate_manifest(manifest)
-    
-    # 3. Verify Mechanism identifies the gap
-    gaps = state.forensic_artifact_scan({})
-    gap = gaps[0] if gaps else None
-    assert gap is not None
-    assert gap['name'] == "ProcessData"
-    assert "input_sensor.bin" in gap['requires']
+    # 4. Assert: Engine identifies the gap correctly
+    assert ready is not None
+    assert ready[0]['name'] == "ProcessData"
+    assert "input_sensor.bin" in ready[0]['requires']
+    assert healed["ProcessData"]["status"] == OrchestrationStatus.PENDING.value
 
 
 ## ==========================================================
@@ -81,31 +79,31 @@ def test_system_tier_gap_resolution(tmp_path):
 @patch('src.api.github_trigger.requests.post')
 def test_system_tier_dispatch_mechanism(mock_post):
     """
-    VERIFICATION: Sovereign Logic - Verifies the signal is sent correctly to GitHub.
-    Ensures the Dispatcher correctly formats the payload for the remote Repo.
+    VERIFICATION: Authorized Signal Transmission.
+    Ensures the Dispatcher correctly formats the payload for the nomadic worker nodes.
     """
-    # 1. Setup Mock Environment
-    os.environ["GH_PAT"] = "nomadic_test_token"
-    
-    # 2. Setup Success Response (HTTP 204 No Content is standard for GitHub Dispatches)
-    mock_response = MagicMock()
-    mock_response.status_code = 204
-    mock_post.return_value = mock_response
-    
-    # 3. Execute Dispatcher Mechanism
-    dispatcher = Dispatcher()
-    payload = {"step": "AnalyzeWeather", "project": "P-001"}
-    success = dispatcher.trigger_worker("org/weather-worker", payload)
-    
-    # 4. Assertions
-    assert success is True
-    mock_post.assert_called_once()
-    
-    # Verify the logic correctly addressed the Repo Dispatch API
-    args, kwargs = mock_post.call_args
-    assert "org/weather-worker" in args[0]
-    assert kwargs['json']['event_type'] == "worker_trigger"
-    assert kwargs['json']['client_payload']['step'] == "AnalyzeWeather"
+    # 1. Setup Mock Environment (Rule 4: Token must exist)
+    with patch.dict('os.environ', {'GH_PAT': 'nomadic_test_token'}):
+        # 2. Mock GitHub 204 Success Response
+        mock_response = MagicMock()
+        mock_response.status_code = 204
+        mock_post.return_value = mock_response
+        
+        # 3. Execute Dispatcher Authority
+        dispatcher = Dispatcher()
+        payload = {"step": "AnalyzeWeather", "project": "P-001"}
+        success = dispatcher.trigger_worker("Dmitrii-Zavalin/weather-worker", payload)
+        
+        # 4. Assertions
+        assert success is True
+        mock_post.assert_called_once()
+        
+        # Verify API logic
+        args, kwargs = mock_post.call_args
+        assert "Dmitrii-Zavalin/weather-worker" in args[0]
+        # Verify the "Super-Rational" payload structure
+        assert kwargs['json']['event_type'] == "worker_trigger"
+        assert kwargs['json']['client_payload']['step'] == "AnalyzeWeather"
 
 
 ## ==========================================================
@@ -114,33 +112,28 @@ def test_system_tier_dispatch_mechanism(mock_post):
 
 def test_system_tier_saturation_silence(tmp_path):
     """
-    VERIFICATION: If all artifacts exist, the Engine must remain silent and halt.
-    Prevents redundant execution (The 'Silent Operator' Rule).
+    VERIFICATION: Silent Operator Rule.
+    If all artifacts exist, the Engine must remain silent (Zero Redundancy).
     """
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
+    # 1. Setup 1-step pipeline
+    steps = [{
+        "name": "StepOne",
+        "target_repo": "org/worker",
+        "requires": ["input.txt"],
+        "produces": ["output.csv"],
+        "timeout_hours": 1
+    }]
+    state, data_path = StateEngineDummy.create(tmp_path, steps=steps)
     
-    # 1. Simulate a Saturated State (Both Input and Output exist)
-    (data_dir / "input.txt").write_text("data")
-    (data_dir / "output.csv").write_text("results")
+    # 2. Arrange: Saturated State (Both Input and Output exist)
+    (data_path / "input.txt").write_text("data", encoding="utf-8")
+    (data_path / "output.csv").write_text("results", encoding="utf-8")
     
-    manifest = {
-        "manifest_id": "M-Complete",
-        "pipeline_steps": [{
-            "name": "StepOne",
-            "target_repo": "org/worker",
-            "requires": ["input.txt"],
-            "produces": ["output.csv"]
-        }]
-    }
+    # 3. Act: Scan the vault
+    healed = state.reconcile_and_heal({})
+    ready = state.get_ready_steps(healed)
     
-    config = tmp_path / "active_disk.json"
-    config.write_text(json.dumps({"project_id": "P-FULL", "manifest_url": "http://mock.io"}))
-    
-    state = OrchestrationState(str(config), str(data_dir))
-    state.hydrate_manifest(manifest)
-    
-    # 2. Scan should return None (No gaps)
-    gaps = state.forensic_artifact_scan({})
-    gap = gaps[0] if gaps else None
-    assert gap is None
+    # 4. Assert: Zero gaps, status is COMPLETED
+    assert ready is None
+    assert healed["StepOne"]["status"] == OrchestrationStatus.COMPLETED.value
+    logger.info("✅ Saturation Silence Verified: No redundant tasks triggered.")
