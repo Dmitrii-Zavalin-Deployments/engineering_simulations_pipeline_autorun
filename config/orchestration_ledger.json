@@ -1,11 +1,12 @@
 {
   "metadata": {
-    "project_id": "navier_stokes_alpha_01"
+    "project_id": "navier_stokes_alpha_01",
+    "manifest_id": "fluid_test_05"
   },
   "steps": {
     "navier_stokes_execution": {
       "status": "IN_PROGRESS",
-      "last_triggered": "2026-04-03T18:28:59.876571+00:00",
+      "last_triggered": "2026-04-03T18:36:02.226900+00:00",
       "timeout_hours": 6,
       "target_repo": "Dmitrii-Zavalin-Deployments/navier_stokes_solver"
     }
