@@ -6,6 +6,13 @@ class OrchestrationStatus(Enum):
     """
     The Operational Truth for Nomadic Workflows.
     Logic is driven by physical artifact presence in 'data/testing-input-output/'.
+    
+    Transition Matrix Mapping:
+    - WAITING: Artifacts missing (Inputs).
+    - PENDING: Artifacts present (Inputs), ready to fire.
+    - IN_PROGRESS: Dispatched, awaiting Results (Outputs).
+    - COMPLETED: Artifacts verified (Outputs).
+    - FAILED: Temporal breach (Timeout).
     """
     WAITING = "WAITING"         # Input artifacts missing; blocked by upstream
     PENDING = "PENDING"         # Inputs present; ready for dispatch
@@ -14,7 +21,10 @@ class OrchestrationStatus(Enum):
     FAILED = "FAILED"           # Timeout exceeded; requires automated reset
 
 class SystemPaths:
-    """Standardized internal relative paths for the nomadic engine."""
+    """
+    Standardized internal relative paths for the nomadic engine.
+    Ensures physical truth is always checked in the designated node folder.
+    """
     CONFIG_DIR = "config"
     DATA_DIR = "data/testing-input-output"
     ACTIVE_DISK = "active_disk.json"

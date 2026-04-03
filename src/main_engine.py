@@ -3,6 +3,9 @@
 import sys
 import logging
 from pathlib import Path
+
+# Internal Core Imports
+from src.core.constants import OrchestrationStatus, SystemPaths
 from src.core.bootloader import Bootloader
 from src.api.github_trigger import Dispatcher
 from src.core.update_ledger import LedgerManager
@@ -21,59 +24,54 @@ def run_engine():
     - Rule 4: Zero-Default Policy (Hard-Halt on Failure)
     - Rule 5: Operational Hygiene (In-Flight Memory Management)
     """
-    CONFIG_PATH = "config/active_disk.json"
-    DATA_PATH = "data/testing-input-output/"
-    FLAG_PATH = Path("config/dormant.flag")
+    CONFIG_PATH = Path(SystemPaths.CONFIG_DIR) / SystemPaths.ACTIVE_DISK
+    DATA_PATH = Path(SystemPaths.DATA_DIR)
+    FLAG_PATH = Path(SystemPaths.CONFIG_DIR) / SystemPaths.DORMANT_FLAG
     
-    # Rule 0 & 4: Instantiate Ledger with zero-default path logic
-    # LedgerManager now also handles the JSON Orchestration Memory
+    # 1. Initialize Ledger Manager
+    # Handles both Markdown Audit and JSON Orchestration Memory
     ledger = LedgerManager(log_path="performance_audit.md")
 
-    # 1. Boot & Auto-Wake
+    # 2. Boot & Auto-Wake
     try:
-        state = Bootloader.mount(CONFIG_PATH, DATA_PATH)
+        state = Bootloader.mount(str(CONFIG_PATH), str(DATA_PATH))
         Bootloader.hydrate(state)
         ledger.record_event("📥 HYDRATION", "State successfully hydrated from Foundation.")
     except Exception as e:
         logger.critical(f"Boot Failure: {e}")
         sys.exit(1)
 
-    # 2. Load In-Flight Memory
-    orchestration_memory = ledger.load_orchestration_state()
-
-    # 3. Forensic Scan (The IDENTIFY phase)
-    # Pass the memory to the scan to filter out active workers
-    target_steps = state.forensic_artifact_scan(orchestration_memory)
+    # 3. Load & Reconcile (The ROUND-AND-ROUND Phase)
+    # We pull the current memory and let the state_engine heal it based on artifacts
+    orchestration_data = ledger.load_orchestration_state()
     
-    # 4. Memory Cleanup (The HOUSEKEEPING phase)
-    # If a job was in memory but forensic_artifact_scan didn't return it because 
-    # its outputs are now present, we clear the lock.
-    if orchestration_memory:
-        for job_name in list(orchestration_memory.keys()):
-            # Find the step definition in manifest
-            step_def = next((s for s in state.manifest_data["pipeline_steps"] if s['name'] == job_name), None)
-            if step_def:
-                # Check if produced artifacts now exist
-                outputs_exist = all((Path(DATA_PATH) / f).exists() for f in step_def['produces'])
-                if outputs_exist:
-                    ledger.clear_lock(job_name)
-                    ledger.record_event("🔓 LOCK_RELEASE", f"Job {job_name} completed successfully. Lock cleared.")
+    # Update the 'steps' portion of the ledger using our Transition Matrix
+    updated_steps = state.reconcile_and_heal(orchestration_data.get("steps", {}))
+    orchestration_data["steps"] = updated_steps
+    
+    # Save the 'Healed' state immediately
+    # This ensures that even if dispatch fails, the ledger reflects the physical truth
+    ledger.update_job_status("_ENGINE_PULSE_", "HEALED", {
+        "project_id": state.project_id,
+        "manifest_id": state.manifest_data["manifest_id"],
+        "target": "INTERNAL",
+        "timeout_hours": 0
+    })
+    ledger.log_scan(state.project_id, "Physical truth reconciled with ledger.")
+
+    # 4. Identify Ready Tasks (The READY Phase)
+    target_steps = state.get_ready_steps(updated_steps)
 
     if not target_steps:
-        logger.info("✅ MISSION COMPLETE: Pipeline Saturated or Workers In-Flight. Entering Dormancy.")
+        # Check if anything is still IN_PROGRESS (Workers in-flight)
+        in_flight = any(s.get("status") == OrchestrationStatus.IN_PROGRESS.value 
+                        for s in updated_steps.values())
         
-        # Only set DORMANT if there is absolutely no work and NO workers in flight
-        active_memory = ledger.load_orchestration_state()
-        if not active_memory:
-            FLAG_PATH.parent.mkdir(parents=True, exist_ok=True)
-            with open(FLAG_PATH, "w", encoding="utf-8") as f:
-                f.write("STATUS: DORMANT")
-            
-        ledger.log_scan(
-            state.project_id, 
-            status="SATURATED_OR_WAITING", 
-            gap="NONE"
-        )
+        if not in_flight:
+            logger.info("✅ MISSION COMPLETE: All tasks COMPLETED or WAITING. Setting DORMANT.")
+            FLAG_PATH.write_text("STATUS: DORMANT", encoding="utf-8")
+        else:
+            logger.info("⏳ PULSE IDLE: Workers are currently in-flight. Staying ACTIVE.")
         return
 
     # 5. Active State Affirmation
@@ -81,7 +79,7 @@ def run_engine():
         FLAG_PATH.write_text("STATUS: ACTIVE", encoding="utf-8")
 
     # 6. Dispatch (The TRIGGER phase)
-    logger.info(f"🔍 Gaps Detected: {len(target_steps)} tasks ready for pulse.")
+    logger.info(f"🚀 Pulse Detected: {len(target_steps)} tasks ready for activation.")
     dispatcher = Dispatcher()
     all_dispatches_successful = True 
     
@@ -93,19 +91,19 @@ def run_engine():
                 "project_id": state.project_id,
                 "manifest_id": manifest_id,
                 "step": step['name'],
-                "requires": step['requires'],
-                "produces": step['produces']
+                "requires": step.get('requires', []),
+                "produces": step.get('produces', [])
             }
             
-            # Logic Gate: Signal the worker
+            # Logic Gate: Trigger the GitHub Worker
             if dispatcher.trigger_worker(step['target_repo'], payload):
-                # ledger.log_dispatch automatically updates the JSON memory to IN_PROGRESS
+                # log_dispatch automatically updates the JSON memory to IN_PROGRESS
                 ledger.log_dispatch(
                     project_id=state.project_id, 
                     manifest_id=manifest_id, 
                     step_name=step['name'], 
                     target_repo=step['target_repo'],
-                    timeout_hours=step['timeout_hours']
+                    timeout_hours=step.get('timeout_hours', 6)
                 )
             else:
                 logger.error(f"❌ DISPATCH FAILED: {step['target_repo']}")
@@ -113,7 +111,7 @@ def run_engine():
 
         except KeyError as e:
             logger.critical(f"Protocol Breach: Missing mandatory key {e}")
-            raise KeyError(f"❌ CRITICAL: Data integrity failure. Missing {e}")
+            sys.exit(1)
 
     # FINAL SAFETY CHECK
     if not all_dispatches_successful:

@@ -1,13 +1,12 @@
-# src/api/github_trigger.py
-
 import os
 import logging
 import requests
 from typing import Dict, Any
 
+# Internal Core Imports
+from src.core.constants import OrchestrationStatus
+
 # Configure Logger for Dispatch Traceability
-# Note: Root logging config is typically handled in main_engine.py, 
-# but local logger is defined for granular traceability.
 logger = logging.getLogger("Engine.Dispatcher")
 
 class Dispatcher:
@@ -28,7 +27,7 @@ class Dispatcher:
         Rule 4: Explicit or Error - No hardcoded fallback tokens.
         """
         # Phase C: Rule 4 - Zero-Default Policy (Explicit or Error)
-        self.token = os.getenv("GH_PAT")  # Using the GH_PAT secret from your YAML
+        self.token = os.getenv("GH_PAT")
         
         if not self.token:
             logger.critical("GH_PAT not found in environment. Access Denied.")
@@ -47,15 +46,20 @@ class Dispatcher:
         """
         url = f"https://api.github.com/repos/{target_repo}/dispatches"
         
-        # Dispatch Protocol: Event type 'worker_trigger' is expected by worker repos
+        # --- LOGICAL WIRING ---
+        # We ensure the payload includes the centralized IN_PROGRESS status.
+        # This prevents the remote worker from having to "guess" the state.
+        if "status" not in payload:
+            payload["status"] = OrchestrationStatus.IN_PROGRESS.value
+
         data = {
             "event_type": "worker_trigger",
             "client_payload": payload
         }
 
-        # Rule 4 Violation Correction: Replaced .get() with direct access.
-        # This ensures a Hard-Halt if the payload is malformed.
         try:
+            # Rule 4: Explicit or Error. 
+            # We use direct key access to trigger a Hard-Halt if the payload is malformed.
             step_name = payload['step'] 
             logger.info(f"📡 Dispatching Signal: [{target_repo}] for Step [{step_name}]")
         except KeyError:
@@ -63,11 +67,10 @@ class Dispatcher:
             raise KeyError("❌ CRITICAL: Step ID missing from dispatch payload.")
 
         try:
-            # Phase C: Rule 1 - Resource Protection (Timeout enforced)
-            # Rule 5: Operational Hygiene - 15s timeout prevents hanging runners
+            # Rule 5: Operational Hygiene - 15s timeout prevents hanging engine runners.
             response = requests.post(url, json=data, headers=self.headers, timeout=15)
             
-            # GitHub returns 204 No Content on successful dispatch
+            # GitHub API: 204 No Content indicates a successful dispatch request.
             if response.status_code == 204:
                 logger.info(f"🚀 Signal Accepted: {target_repo} activation confirmed.")
                 return True
