@@ -50,12 +50,14 @@ class Dispatcher:
         
         # --- LOGICAL WIRING ---
         # We ensure the payload includes the centralized IN_PROGRESS status.
-        # This prevents the remote worker from having to "guess" the state.
         if "status" not in payload:
             payload["status"] = OrchestrationStatus.IN_PROGRESS.value
 
+        # PHASE C ALIGNMENT: 
+        # Hardcoding the caller identity as the event_type ensures the Solver 
+        # knows exactly which Engine is triggering the physics execution.
         data = {
-            "event_type": "worker_trigger",
+            "event_type": "artifact_driven_simulation_engine",
             "client_payload": payload
         }
 

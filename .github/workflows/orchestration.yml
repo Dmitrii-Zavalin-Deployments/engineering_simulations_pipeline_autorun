@@ -183,7 +183,6 @@ jobs:
           APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
           REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
         run: |
-          chmod +x src/download_from_dropbox.sh
           ./src/download_from_dropbox.sh
 
       - name: ⚡ Execute Sovereign Logic Gate
