@@ -15,11 +15,11 @@ def fake_foundation(tmp_path):
     """Creates a temporary directory structure for nomadic testing."""
     d = tmp_path / "project_root"
     d.mkdir()
-    data_dir = d / "data"
+    data_dir = fake_foundation["root"] / "data"
     data_dir.mkdir()
     
     # Create a valid active_disk.json
-    active_disk = d / "active_disk.json"
+    active_disk = fake_foundation["root"] / "active_disk.json"
     manifest_data = {
         "project_id": "navier-stokes-test",
         "version": "1.0.0",
@@ -36,7 +36,7 @@ def fake_foundation(tmp_path):
     active_disk.write_text(json.dumps(manifest_data))
     
     # Create a dummy audit file
-    audit_file = d / "performance_audit.md"
+    audit_file = fake_foundation["root"] / "performance_audit.md"
     audit_file.write_text("# Performance Audit Log\n")
     
     return {
@@ -55,7 +55,7 @@ def test_clean_wakeup_hydration(fake_foundation):
         # Simulate local disk pointing to a manifest
         mock_fetch.return_value = fake_foundation["manifest_content"]
         
-        state = Bootloader.mount(str(d / "missing.json"), str(fake_foundation["root"]))
+        state = Bootloader.mount(str(fake_foundation["root"] / "missing.json"), str(fake_foundation["root"]))
         
         assert isinstance(state, OrchestrationState)
         assert state.project_id == "navier-stokes-test"
@@ -73,11 +73,11 @@ def test_auto_wake_trigger(fake_foundation):
     dormant_flag = root / "dormant.flag"
     dormant_flag.write_text("STATUS: DORMANT")
     
-    os.utime(str(d / "missing.json"), (os.path.getatime(dormant_flag) + 100,
+    os.utime(str(fake_foundation["root"] / "missing.json"), (os.path.getatime(dormant_flag) + 100,
                                              os.path.getmtime(dormant_flag) + 100))
     
     # Bootloader is static
-    Bootloader.mount(str(d / "missing.json"), str(fake_foundation["root"]))
+    Bootloader.mount(str(fake_foundation["root"] / "missing.json"), str(fake_foundation["root"]))
     
     # Expectation: Flag is removed or set to ACTIVE
     assert not dormant_flag.exists() or "ACTIVE" in dormant_flag.read_text()
@@ -100,7 +100,7 @@ def test_poisoned_manifest_schema_enforcement(fake_foundation):
         
         # Expectation: jsonschema.validate (or your internal check) raises error
         with pytest.raises(ValidationError):
-            Bootloader.mount(str(d / "missing.json"), str(fake_foundation["root"]))
+            Bootloader.mount(str(fake_foundation["root"] / "missing.json"), str(fake_foundation["root"]))
 
 def test_missing_foundation_halt(fake_foundation):
     """
@@ -111,4 +111,4 @@ def test_missing_foundation_halt(fake_foundation):
     # Bootloader is static
     
     with pytest.raises(FileNotFoundError):
-        Bootloader.mount(str(d / "missing.json"), str(fake_foundation["root"]))
+        Bootloader.mount(str(fake_foundation["root"] / "missing.json"), str(fake_foundation["root"]))
