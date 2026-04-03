@@ -14,7 +14,7 @@ logger = logging.getLogger("Engine.TestHelper")
 class StateEngineDummy:
     """
     Factory to generate real OrchestrationState instances in a temporary filesystem.
-    This bypasses mocking in favor of 'Physical Truth' testing.
+    Updated for Phase C Schema Sovereignty and Directory Relocation.
     """
 
     @staticmethod
@@ -25,34 +25,57 @@ class StateEngineDummy:
         steps: list = None
     ) -> Tuple[OrchestrationState, Path]:
         """
-        Creates a physical nomadic node environment and returns a hydrated OrchestrationState.
-        
-        Args:
-            tmp_path: The pytest tmp_path fixture (temporary directory).
-            project_id: Mock project identifier.
-            manifest_id: Mock manifest identifier.
-            steps: Optional list of pipeline steps to override the default.
+        Creates a physical nomadic node environment including the /schema directory.
         """
-        # 1. Define Paths based on SystemPaths Architecture
+        # 1. Define Paths based on SystemPaths (Rule 4)
         config_dir = tmp_path / SystemPaths.CONFIG_DIR
+        schema_dir = tmp_path / SystemPaths.SCHEMA_DIR
         data_dir = tmp_path / SystemPaths.DATA_DIR
-        config_dir.mkdir(parents=True, exist_ok=True)
-        data_dir.mkdir(parents=True, exist_ok=True)
+        
+        for directory in [config_dir, schema_dir, data_dir]:
+            directory.mkdir(parents=True, exist_ok=True)
 
-        # 2. Create the Core Schema (Mandatory Gate for Hydration)
-        schema_path = config_dir / "core_schema.json"
-        schema_content = {
+        # 2. Create the Manifest Schema (Moved to /schema)
+        manifest_schema_path = schema_dir / SystemPaths.MANIFEST_SCHEMA
+        manifest_schema_content = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
             "type": "object",
             "properties": {
                 "manifest_id": {"type": "string"},
                 "project_id": {"type": "string"},
-                "pipeline_steps": {"type": "array"}
+                "pipeline_steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "target_repo": {"type": "string"},
+                            "timeout_hours": {"type": "integer"},
+                            "requires": {"type": "array", "items": {"type": "string"}},
+                            "produces": {"type": "array", "items": {"type": "string"}}
+                        },
+                        "required": ["name", "target_repo", "requires", "produces"]
+                    }
+                }
             },
             "required": ["manifest_id", "project_id", "pipeline_steps"]
         }
-        schema_path.write_text(json.dumps(schema_content), encoding="utf-8")
+        manifest_schema_path.write_text(json.dumps(manifest_schema_content), encoding="utf-8")
 
-        # 3. Create the Active Disk Config
+        # 3. Create the Active Disk Schema
+        active_disk_schema_path = schema_dir / SystemPaths.ACTIVE_DISK_SCHEMA
+        active_disk_schema_content = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string"},
+                "manifest_url": {"type": "string"}
+            },
+            "required": ["project_id", "manifest_url"]
+        }
+        active_disk_schema_path.write_text(json.dumps(active_disk_schema_content), encoding="utf-8")
+
+        # 4. Create the Active Disk Config (Rule 4: Direct Key Access)
         config_path = config_dir / SystemPaths.ACTIVE_DISK
         config_content = {
             "project_id": project_id,
@@ -60,7 +83,7 @@ class StateEngineDummy:
         }
         config_path.write_text(json.dumps(config_content), encoding="utf-8")
 
-        # 4. Define Pipeline Steps (Default if not provided)
+        # 5. Define Pipeline Steps (Rule 4: No silent defaults)
         if steps is None:
             steps = [
                 {
@@ -78,8 +101,8 @@ class StateEngineDummy:
             "pipeline_steps": steps
         }
 
-        # 5. Instantiate and Hydrate the Real Class
-        # This ensures __slots__ and validation logic are truly executed.
+        # 6. Instantiate and Hydrate the Real Class
+        # We pass strings of the paths to mimic the real entry point.
         state = OrchestrationState(str(config_path), str(data_dir))
         state.hydrate_manifest(manifest_data)
 

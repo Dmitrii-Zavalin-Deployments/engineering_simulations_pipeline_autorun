@@ -23,10 +23,16 @@ class OrchestrationStatus(Enum):
 class SystemPaths:
     """
     Standardized internal relative paths for the nomadic engine.
-    Ensures physical truth is always checked in the designated node folder.
     """
     CONFIG_DIR = "config"
+    SCHEMA_DIR = "schema"  # New Directory
     DATA_DIR = "data/testing-input-output"
+    
+    # Files
     ACTIVE_DISK = "active_disk.json"
     LEDGER = "orchestration_ledger.json"
     DORMANT_FLAG = "dormant.flag"
+    
+    # Schemas
+    MANIFEST_SCHEMA = "manifest_schema.json"
+    ACTIVE_DISK_SCHEMA = "active_disk_schema.json"
