@@ -26,15 +26,18 @@ def run_engine():
     - Memory-Disk Sync: Bootloader return overrides stale disk reads.
     """
     CONFIG_PATH = Path(SystemPaths.CONFIG_DIR) / SystemPaths.ACTIVE_DISK
+    # Rule 4: Explicit Ledger Path for Atomic Persistence
+    LEDGER_PATH = Path(SystemPaths.CONFIG_DIR) / SystemPaths.ORCHESTRATION_LEDGER
     DATA_PATH = Path(SystemPaths.DATA_DIR)
     
-    # 1. Initialize Ledger Manager
+    # 1. Initialize Ledger Manager (For performance_audit.md and flag toggling)
     ledger_manager = LedgerManager(log_path="performance_audit.md")
 
     # 2. Boot & Auto-Wake (The Ignition Phase)
     try:
-        # Rule 4: Mount must find the physical active_disk.json or Hard-Halt
-        state = Bootloader.mount(str(CONFIG_PATH), str(DATA_PATH))
+        # Rule 4: Mount must find the physical active_disk.json or Hard-Halt.
+        # We now pass LEDGER_PATH to ensure OrchestrationState can save its own mutations.
+        state = Bootloader.mount(str(CONFIG_PATH), str(DATA_PATH), str(LEDGER_PATH))
         
         # CRITICAL FIX: Capture the synchronized ledger from Bootloader.
         # This prevents the engine from using stale data from a previous project run.
@@ -47,7 +50,7 @@ def run_engine():
 
     # 3. Reconcile (The ROUND-AND-ROUND Phase)
     # Rule 4: We use the 'steps' from our fresh orchestration_data.
-    # reconcile_and_heal verifies physical truth against the data vault.
+    # reconcile_and_heal verifies physical truth and AUTOMATICALLY persists to disk.
     updated_steps = state.reconcile_and_heal(orchestration_data["steps"])
     
     # 4. Evaluate Dormancy (The Efficiency Gate)
@@ -91,8 +94,8 @@ def run_engine():
             
             # Logic Gate: Signal the Remote Worker
             if dispatcher.trigger_worker(step['target_repo'], payload):
-                # log_dispatch automatically updates JSON memory status to IN_PROGRESS
-                # and ensures the physical orchestration_ledger.json is updated.
+                # log_dispatch updates JSON memory status to IN_PROGRESS
+                # and performs a final sync of the orchestration_ledger.json.
                 ledger_manager.log_dispatch(
                     project_id=state.project_id, 
                     manifest_id=manifest_id, 

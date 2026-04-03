@@ -17,10 +17,17 @@ class OrchestrationState:
     Implements the 'Round-and-Round' Transition Matrix for Nomadic Automation.
     Phase C Compliance: Rule 0 (__slots__), Rule 4 (Zero-Default), and Schema Sovereignty.
     """
-    __slots__ = ['project_id', 'manifest_url', 'data_path', 'manifest_data', 'schema_path']
+    
+    # Rule 0: Memory Optimization
+    __slots__ = ['project_id', 'manifest_url', 'data_path', 'manifest_data', 'schema_path', 'ledger_path']
 
-    def __init__(self, config_path: str, data_root: str):
+    def __init__(self, config_path: str, data_root: str, ledger_path: str):
+        """
+        Deterministic Initialization.
+        Requires explicit ledger_path to ensure Atomic Persistence.
+        """
         self.data_path = Path(data_root)
+        self.ledger_path = Path(ledger_path)
         
         # Rule 4: Explicit pathing to the Schema Directory
         self.schema_path = Path(SystemPaths.SCHEMA_DIR) / SystemPaths.MANIFEST_SCHEMA
@@ -80,9 +87,22 @@ class OrchestrationState:
             logger.error(f"⚠️ Timing Metadata Corruption for {job_name}: {e}")
             return True
 
+    def save_ledger(self, orchestration_ledger: dict):
+        """
+        Rule 4 Compliance: Atomic Write to Disk.
+        Ensures the physical .json file matches the memory state.
+        """
+        try:
+            with open(self.ledger_path, 'w', encoding="utf-8") as f:
+                json.dump(orchestration_ledger, f, indent=2)
+            logger.info(f"💾 Ledger Persisted: {self.ledger_path.name}")
+        except Exception as e:
+            logger.error(f"❌ Persistence Error: Failed to write ledger. {e}")
+
     def reconcile_and_heal(self, orchestration_ledger: dict):
         """
         The Core Logic Loop: Reconciles the Ledger against Physical Reality.
+        Triggers a disk save if any mutations occur.
         """
         if not self.manifest_data:
             raise RuntimeError("❌ CRITICAL: Scan attempted without Manifest Hydration.")
@@ -130,6 +150,8 @@ class OrchestrationState:
                 else:
                     self._update_status(name, entry, OrchestrationStatus.WAITING, "Resetting to Waiting.")
 
+        # --- PERSISTENCE GATE ---
+        self.save_ledger(orchestration_ledger)
         return orchestration_ledger
 
     def get_ready_steps(self, orchestration_ledger: dict):
