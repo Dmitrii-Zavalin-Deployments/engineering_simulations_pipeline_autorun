@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 from src.core.update_ledger import LedgerManager
 from src.core.constants import OrchestrationStatus, SystemPaths
-from tests.helpers.state_engine_dummy import StateEngineDummy
 
 ## ==========================================================
 ## BEHAVIOR TEST: DORMANCY ORCHESTRATION (Rule 1)
