@@ -15,8 +15,8 @@ logger = logging.getLogger("Engine.Bootloader")
 class Bootloader:
     """
     The Ignition System for the Nomadic Engine.
-    Responsibility: Filesystem mounting, schema validation, and ledger seeding.
-    Compliance: Rule 0 (Integrity), Rule 1 (Efficiency), Rule 4 (Zero-Default).
+    Responsibility: Filesystem mounting, schema validation, and ledger synchronization.
+    Compliance: Rule 0 (Integrity), Rule 4 (Zero-Default), Memory-Disk Sync.
     """
 
     @staticmethod
@@ -56,10 +56,10 @@ class Bootloader:
         return OrchestrationState(config_path, data_path)
 
     @staticmethod
-    def hydrate(state: OrchestrationState):
+    def hydrate(state: OrchestrationState) -> dict:
         """
-        Fetches remote manifest, validates schema, and seeds the ledger.
-        Ensures the 'Round-and-Round' logic starts from a known physical truth.
+        Fetches remote manifest, validates schema, and returns the synchronized ledger.
+        Ensures Memory-Disk parity to prevent stale status overrides.
         """
         try:
             # 1. Validate Local Entry Point
@@ -79,7 +79,9 @@ class Bootloader:
             target_pid = remote_manifest["project_id"]
             target_mid = remote_manifest["manifest_id"]
 
+            ledger_content = {}
             should_reset = False
+            
             if ledger_path.exists():
                 try:
                     ledger_content = json.loads(ledger_path.read_text(encoding="utf-8"))
@@ -97,7 +99,6 @@ class Bootloader:
                 logger.warning(f"⚠️ Project Shift/Fresh Start: Seeding Ledger for {target_pid}")
                 
                 # Rule 4: Explicitly map all manifest steps to WAITING.
-                # No silent defaults; the ledger must contain every task defined in the manifest.
                 fresh_steps = {}
                 for step in remote_manifest["pipeline_steps"]:
                     fresh_steps[step["name"]] = {
@@ -107,7 +108,7 @@ class Bootloader:
                         "target_repo": step["target_repo"]
                     }
 
-                fresh_ledger = {
+                ledger_content = {
                     "metadata": {
                         "project_id": target_pid,
                         "manifest_id": target_mid
@@ -115,12 +116,16 @@ class Bootloader:
                     "steps": fresh_steps
                 }
                 
-                ledger_path.write_text(json.dumps(fresh_ledger, indent=2), encoding="utf-8")
-                logger.info(f"🧹 Ledger seeded with {len(fresh_steps)} steps at WAITING status.")
+                # Synchronize to Disk
+                ledger_path.write_text(json.dumps(ledger_content, indent=2), encoding="utf-8")
+                logger.info(f"🧹 Ledger seeded and synchronized.")
 
-            # Hydrate State Engine
+            # Hydrate State Engine attributes
             state.hydrate_manifest(remote_manifest)
             logger.info(f"✅ Boot Sequence Complete: [{state.project_id}] Hydrated.")
+            
+            # Return the ledger_content to ensure Main Engine memory is synced with Disk
+            return ledger_content
             
         except Exception as e:
             logger.critical(f"Hydration Failed: {e}")

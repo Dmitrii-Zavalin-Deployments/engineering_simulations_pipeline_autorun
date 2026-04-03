@@ -23,35 +23,36 @@ def run_engine():
     Phase C Compliance:
     - Rule 1: Efficiency Mandate (Dormancy Toggle)
     - Rule 4: Zero-Default Policy (Hard-Halt on Missing Keys)
-    - Rule 5: Operational Hygiene (In-Flight Memory Management)
+    - Memory-Disk Sync: Bootloader return overrides stale disk reads.
     """
     CONFIG_PATH = Path(SystemPaths.CONFIG_DIR) / SystemPaths.ACTIVE_DISK
     DATA_PATH = Path(SystemPaths.DATA_DIR)
     
     # 1. Initialize Ledger Manager
-    # Handles both Markdown Audit and JSON Orchestration Memory
-    ledger = LedgerManager(log_path="performance_audit.md")
+    ledger_manager = LedgerManager(log_path="performance_audit.md")
 
-    # 2. Boot & Auto-Wake
+    # 2. Boot & Auto-Wake (The Ignition Phase)
     try:
         # Rule 4: Mount must find the physical active_disk.json or Hard-Halt
         state = Bootloader.mount(str(CONFIG_PATH), str(DATA_PATH))
-        Bootloader.hydrate(state)
-        ledger.record_event("📥 HYDRATION", f"State successfully hydrated for Project: {state.project_id}")
+        
+        # CRITICAL FIX: Capture the synchronized ledger from Bootloader.
+        # This prevents the engine from using stale data from a previous project run.
+        orchestration_data = Bootloader.hydrate(state)
+        
+        ledger_manager.record_event("📥 HYDRATION", f"State synchronized for Project: {state.project_id}")
     except Exception as e:
         logger.critical(f"Boot Failure: {e}")
         sys.exit(1)
 
-    # 3. Load & Reconcile (The ROUND-AND-ROUND Phase)
-    # Pull current memory; reconcile_and_heal verifies physical truth against the vault.
-    orchestration_data = ledger.load_orchestration_state()
-    
-    # Rule 4: orchestration_data["steps"] must exist or the engine halts (Sovereign Schema)
+    # 3. Reconcile (The ROUND-AND-ROUND Phase)
+    # Rule 4: We use the 'steps' from our fresh orchestration_data.
+    # reconcile_and_heal verifies physical truth against the data vault.
     updated_steps = state.reconcile_and_heal(orchestration_data["steps"])
     
     # 4. Evaluate Dormancy (The Efficiency Gate)
     # Rule 1: If all steps are COMPLETED, toggle STATUS: DORMANT to save compute.
-    dormancy_status = ledger.evaluate_dormancy_state(updated_steps)
+    dormancy_status = ledger_manager.evaluate_dormancy_state(updated_steps)
     
     if "DORMANT" in dormancy_status:
         logger.info("✅ MISSION COMPLETE: All artifacts present. System entering hibernation.")
@@ -77,7 +78,7 @@ def run_engine():
     
     for step in target_steps:
         try:
-            # Rule 4: Strict key access. If manifest is damaged, protocol breach triggers halt.
+            # Rule 4: Strict key access.
             manifest_id = state.manifest_data["manifest_id"]
             
             payload = {
@@ -91,7 +92,8 @@ def run_engine():
             # Logic Gate: Signal the Remote Worker
             if dispatcher.trigger_worker(step['target_repo'], payload):
                 # log_dispatch automatically updates JSON memory status to IN_PROGRESS
-                ledger.log_dispatch(
+                # and ensures the physical orchestration_ledger.json is updated.
+                ledger_manager.log_dispatch(
                     project_id=state.project_id, 
                     manifest_id=manifest_id, 
                     step_name=step['name'], 
@@ -100,7 +102,6 @@ def run_engine():
                 )
             else:
                 logger.error(f"❌ DISPATCH FAILED: {step['target_repo']} - Manual check required.")
-                # We do not sys.exit here to allow other ready steps to attempt dispatch.
 
         except KeyError as e:
             logger.critical(f"Protocol Breach: Missing mandatory manifest key {e}")
