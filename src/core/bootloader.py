@@ -118,7 +118,7 @@ class Bootloader:
                 
                 # Synchronize to Disk
                 ledger_path.write_text(json.dumps(ledger_content, indent=2), encoding="utf-8")
-                logger.info(f"🧹 Ledger seeded and synchronized.")
+                logger.info("🧹 Ledger seeded and synchronized.")
 
             # Hydrate State Engine attributes
             state.hydrate_manifest(remote_manifest)
