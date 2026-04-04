@@ -1,9 +1,13 @@
 # tests/behavior/test_artifact_forensics.py
 
 import json
+import pytest
 from pathlib import Path
+from datetime import datetime, timedelta
 from src.core.state_engine import OrchestrationState
 from src.core.constants import OrchestrationStatus
+
+# --- PHASE A (2): IDEMPOTENCY & ISOLATION ---
 
 def test_forensic_idempotency_recovery(tmp_path):
     """
@@ -49,8 +53,6 @@ def test_forensic_idempotency_recovery(tmp_path):
     state.reconcile_and_heal(mock_ledger)
 
     # 5. VERIFICATION
-    # Step 1 should be COMPLETED because the artifact exists.
-    # Step 2 should be PENDING because its requirement (artifact_1) is now physically present.
     assert mock_ledger["step_1"]["status"] == OrchestrationStatus.COMPLETED.value
     assert mock_ledger["step_2"]["status"] == OrchestrationStatus.PENDING.value
     print("✅ Forensic Discovery Alignment Confirmed: Execution resumes based on disk truth.")
@@ -74,7 +76,7 @@ def test_clean_room_isolation(tmp_path):
     # 3. Place a file OUTSIDE the recognized data directory
     (tmp_path / "stray_artifact.zip").write_text("contamination")
     
-    # 4. Initialize Engine (should succeed now that disk.json exists)
+    # 4. Initialize Engine
     state = OrchestrationState(
         str(config_file), 
         str(data_dir), 
@@ -82,6 +84,77 @@ def test_clean_room_isolation(tmp_path):
     )
     
     # 5. Verification: Check that the engine remains blind to outside files
-    # state.data_path should point only to data_dir
     assert not (Path(state.data_path) / "stray_artifact.zip").exists()
     print("✅ Isolation Mandate Verified: Engine is successfully isolated from contamination.")
+
+# --- PHASE B (6): STATE-MACHINE LOGIC & IDENTITY ---
+
+def test_timeout_recovery_logic(tmp_path):
+    """
+    CONSTITUTION CHECK: Phase B (6) - Forensic Decision Tree.
+    Verifies that a stale IN_PROGRESS job is marked as FAILED by reconcile_and_heal.
+    """
+    # 1. SETUP
+    config_file = tmp_path / "disk.json"
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    ledger_path = tmp_path / "ledger.json"
+    
+    config_file.write_text(json.dumps({"project_id": "TIME-TEST", "manifest_url": "url"}), encoding="utf-8")
+    state = OrchestrationState(str(config_file), str(data_dir), str(ledger_path))
+    
+    step_name = "stale_process"
+    state.hydrate_manifest({
+        "manifest_id": "M-TIME",
+        "project_id": "TIME-TEST",
+        "pipeline_steps": [{
+            "name": step_name,
+            "requires": [],
+            "produces": ["output.zip"],
+            "timeout_hours": 2, # 2 Hour limit
+            "target_repo": "nomad/worker"
+        }]
+    })
+
+    # 2. SCENARIO: Stale Lock (Simulate timestamp from 5 hours ago)
+    stale_time = (datetime.now() - timedelta(hours=5)).isoformat()
+    ledger = {
+        step_name: {
+            "status": OrchestrationStatus.IN_PROGRESS.value,
+            "last_triggered": stale_time
+        }
+    }
+
+    # 3. ACTION: The Logic Loop reconciles against the stale lock
+    state.reconcile_and_heal(ledger)
+
+    # 4. VERIFICATION: Forensic marking of Failure per Rule 4
+    assert ledger[step_name]["status"] == OrchestrationStatus.FAILED.value
+    print(f"✅ Timeout Verified: Stale task {step_name} transitioned to FAILED.")
+
+def test_identity_handshake_mismatch(tmp_path):
+    """
+    CONSTITUTION CHECK: Phase B (6) - Metadata Handshake.
+    Verifies that hydration fails if the manifest doesn't match the config project_id.
+    """
+    config_file = tmp_path / "disk.json"
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    
+    # Config says Project A
+    config_file.write_text(json.dumps({"project_id": "PROJECT-A", "manifest_url": "url"}), encoding="utf-8")
+    state = OrchestrationState(str(config_file), str(data_dir), str(tmp_path/"ledger.json"))
+
+    # Manifest says Project B (The Breach)
+    mismatched_manifest = {
+        "manifest_id": "M-MISMATCH",
+        "project_id": "PROJECT-B", 
+        "pipeline_steps": []
+    }
+
+    # 3. ACTION & VERIFICATION: Hard-Halt for Identity Breach
+    with pytest.raises(RuntimeError) as excinfo:
+        state.hydrate_manifest(mismatched_manifest)
+    
+    assert "Identity Mismatch" in str(excinfo.value)
+    print("✅ Identity Guard Verified: Blocked project_id mismatch.")
