@@ -1,8 +1,6 @@
 # tests/behavior/test_silent_audit.py
 
 import json
-import pytest
-from pathlib import Path
 from src.core.state_engine import OrchestrationState
 from src.core.constants import OrchestrationStatus
 
@@ -56,7 +54,7 @@ def test_atomic_persistence_audit(tmp_path):
     actual_status = persisted_data["audit_step"]["status"]
     assert actual_status == OrchestrationStatus.PENDING.value
     
-    print(f"✅ Audit Gate Verified: Ledger on disk reflects PENDING state.")
+    print("✅ Audit Gate Verified: Ledger on disk reflects PENDING state.")
 
 def test_audit_traceability_sequence(tmp_path):
     """
