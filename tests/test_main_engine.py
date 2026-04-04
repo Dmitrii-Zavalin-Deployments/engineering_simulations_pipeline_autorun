@@ -3,7 +3,7 @@
 import pytest
 import json
 from unittest.mock import patch
-
+from datetime import datetime, timezone
 from src.core.constants import OrchestrationStatus
 from src.main_engine import run_engine
 
@@ -164,18 +164,34 @@ class TestMainEnginePhysical:
         with patch("src.main_engine.logger") as mock_logger:
             with patch("src.core.bootloader.Bootloader.hydrate") as mock_hydrate:
                 def hydrate_in_flight(state_obj):
+                    # We define the step in the manifest
                     state_obj.hydrate_manifest({
                         "manifest_id": "M-FLIGHT",
                         "project_id": "PROJ-FLIGHT",
-                        "pipeline_steps": [{"name": "worker_a", "requires": [], "produces": ["out.csv"]}]
+                        "pipeline_steps": [{
+                            "name": "worker_a", 
+                            "requires": [], 
+                            "produces": ["out.csv"],
+                            "timeout_hours": 6 # Required for staleness check
+                        }]
                     })
-                    # Simulate a step that is already triggered and running
-                    return {"steps": {"worker_a": {"status": OrchestrationStatus.IN_PROGRESS.value}}}
+                    
+                    # Simulate a step that is already triggered.
+                    # Rule 4: Must include 'last_triggered' to pass the _is_job_stale check.
+                    return {
+                        "steps": {
+                            "worker_a": {
+                                "status": OrchestrationStatus.IN_PROGRESS.value,
+                                "last_triggered": datetime.now(timezone.utc).isoformat(),
+                                "timeout_hours": 6
+                            }
+                        }
+                    }
                 
                 mock_hydrate.side_effect = hydrate_in_flight
                 run_engine()
                 
-                # Check for the 'Awaiting arrival' pulse idle message
+                # This should now reach line 73 of src/main_engine.py
                 mock_logger.info.assert_any_call("⏳ PULSE IDLE: Workers are currently in-flight. Awaiting arrival.")
 
     def test_dispatch_api_failure_handling(self, nomadic_node):
