@@ -1,6 +1,5 @@
 # tests/behavior/test_dispatch_gate.py
 
-import pytest
 from src.core.state_engine import OrchestrationState
 from src.core.constants import OrchestrationStatus
 
