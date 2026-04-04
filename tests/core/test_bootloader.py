@@ -115,6 +115,7 @@ class TestBootloaderForensics:
         with pytest.raises(RuntimeError, match="CRITICAL: Hydration failure"):
             Bootloader.hydrate(mock_state)
     
+    @responses.activate
     def test_hydrate_recovery_from_corruption(self, mock_env):
         """Covers Lines 92-93: Recovery from Corrupt JSON or Missing Keys."""
         # 1. Simulate a corrupted Ledger file (Invalid JSON)
@@ -143,6 +144,7 @@ class TestBootloaderForensics:
         # Verify the file was overwritten with valid data
         assert json.loads(ledger_path.read_text())["metadata"]["project_id"] == "P1"
 
+    @responses.activate
     def test_hydrate_recovery_from_missing_metadata(self, mock_env):
         """Covers Lines 92-93: Recovery when JSON is valid but keys are missing."""
         ledger_path = mock_env["config"] / "ledger.json"
