@@ -2,6 +2,7 @@
 
 import pytest
 import responses
+import requests
 from unittest.mock import patch
 from src.api.github_trigger import Dispatcher
 from src.core.constants import OrchestrationStatus
