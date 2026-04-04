@@ -46,6 +46,7 @@ class TestMainEngine:
         
         # Mocking hydration and forcing dormancy
         mock_hydrate.return_value = {"steps": {}}
+        state.hydrate_manifest({"manifest_id": "TEST-MID", "project_id": "TEST-PID", "pipeline_steps": []})
         mock_dormancy.return_value = "STATUS: DORMANT"
 
         with patch("src.main_engine.logger") as mock_logger:
@@ -56,6 +57,10 @@ class TestMainEngine:
     def test_successful_dispatch_cycle(self, mock_trigger, mock_env):
         """Tests the full loop: Identify ready tasks -> Trigger GitHub -> Log Dispatch."""
         state, data_dir = mock_env
+        schema_dir = data_dir.parent / "schema"
+        schema_dir.mkdir(parents=True, exist_ok=True)
+        (schema_dir / "active_disk_schema.json").write_text("{\"type\":\"object\"}")
+        (schema_dir / "manifest_schema.json").write_text("{\"type\":\"object\"}")
         
         # 1. Prepare input artifact to make 'alpha_solver' READY
         (data_dir / "input.csv").write_text("dummy data")
@@ -93,6 +98,7 @@ class TestMainEngine:
 
         with patch("src.core.bootloader.Bootloader.hydrate") as mock_hydrate:
             mock_hydrate.return_value = {"steps": steps}
+            state.hydrate_manifest({"manifest_id": "TEST-MID", "project_id": "TEST-PID", "pipeline_steps": []})
             with patch("src.main_engine.logger") as mock_logger:
                 run_engine()
                 mock_logger.info.assert_any_call("⏳ PULSE IDLE: Workers are currently in-flight. Awaiting arrival.")
