@@ -1,7 +1,5 @@
 # tests/architecture/test_hygiene_and_archivist.py
 
-import os
-import pytest
 from src.io.dropbox_utils import TokenManager
 from src.core.update_ledger import LedgerManager
 
