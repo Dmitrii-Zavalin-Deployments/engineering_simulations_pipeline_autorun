@@ -4,7 +4,7 @@ import pytest
 import json
 import os
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import patch
 from src.core.state_engine import OrchestrationState
 from src.core.constants import OrchestrationStatus, SystemPaths
 
