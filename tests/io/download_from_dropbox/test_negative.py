@@ -1,4 +1,4 @@
-# tests/io/test_exceptions_download_from_dropbox.py
+# tests/io/download_from_dropbox/test_negative.py
 
 import pytest
 import dropbox
