@@ -2,9 +2,11 @@
 
 import pytest
 import json
+import os
+from pathlib import Path
 from unittest.mock import patch
 
-from src.core.constants import OrchestrationStatus
+from src.core.constants import OrchestrationStatus, SystemPaths
 from src.main_engine import run_engine
 
 class TestMainEnginePhysical:
@@ -35,6 +37,9 @@ class TestMainEnginePhysical:
         (schema_dir / "active_disk_schema.json").write_text(json.dumps({"type": "object"}))
         (schema_dir / "manifest_schema.json").write_text(json.dumps({"type": "object"}))
 
+        # 3. Secure Environment (Rule 4: Explicit or Error)
+        monkeypatch.setenv("GH_PAT", "mock_access_token_for_testing")
+
         return config_dir, data_dir, schema_dir
 
     def test_boot_halt_on_missing_config(self, nomadic_node):
@@ -44,8 +49,8 @@ class TestMainEnginePhysical:
         assert e.value.code == 1
 
     def test_physical_dormancy_hibernation(self, nomadic_node):
-        """Rule 1: System must halt if the physical dormant.flag is set."""
-        config_dir, _, _ = nomadic_node
+        """Rule 1: Verify hibernation signal when artifacts are satisfied."""
+        config_dir, data_dir, _ = nomadic_node
         
         # 1. Create Physical Active Disk
         (config_dir / "active_disk.json").write_text(json.dumps({
@@ -58,14 +63,19 @@ class TestMainEnginePhysical:
 
         with patch("src.main_engine.logger") as mock_logger:
             with patch("src.core.bootloader.Bootloader.hydrate") as mock_hydrate:
-                # SIDE EFFECT: Physically unlock the state object by populating manifest_data
+                # SIDE EFFECT: Physically unlock the state object & simulate completed artifact
                 def hydrate_side_effect(state_obj):
+                    (data_dir / "final_output.csv").write_text("artifact_present")
                     state_obj.hydrate_manifest({
                         "manifest_id": "TEST-MID",
                         "project_id": "TEST-PROJ",
-                        "pipeline_steps": []
+                        "pipeline_steps": [{
+                            "name": "final_step",
+                            "requires": [],
+                            "produces": ["final_output.csv"]
+                        }]
                     })
-                    return {"steps": {}}
+                    return {"steps": {"final_step": {"status": "COMPLETED"}}}
                 
                 mock_hydrate.side_effect = hydrate_side_effect
                 run_engine()
