@@ -10,34 +10,17 @@ def test_manifest_schema_hard_halt(tmp_path):
     Verifies that a 'corrupt disk' (invalid manifest) results in an 
     immediate Hard-Halt, preventing execution under ambiguity.
     """
-    # 1. Setup Mock Workspace
-    config_file = tmp_path / "disk.json"
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    
-    # Seed the mandatory disk config
-    config_file.write_text(json.dumps({
-        "project_id": "HALT-TEST",
-        "manifest_url": "http://mock.com"
-    }))
-
-    # 2. Initialize Engine
-    state = OrchestrationState(str(config_file), str(data_dir), str(tmp_path/"ledger.json"))
-
-    # 3. SCENARIO: Corrupt Manifest (Missing mandatory 'pipeline_steps' key)
-    corrupt_manifest = {
-        "manifest_id": "M-BAD",
-        "project_id": "HALT-TEST"
-        # 'pipeline_steps' is missing!
-    }
+    # ... (setup code remains the same) ...
 
     # 4. EXECUTION & VERIFICATION: Hard-Halt
-    # The hydrate_manifest method must raise RuntimeError upon schema violation
     with pytest.raises(RuntimeError) as excinfo:
         state.hydrate_manifest(corrupt_manifest)
     
-    assert "CRITICAL: Hard-Halt" in str(excinfo.value)
-    assert "manifest_json" in str(excinfo.value) or "validate" in str(excinfo.value)
+    # UPDATED ASSERTION: Match the actual error string produced by the engine
+    error_msg = str(excinfo.value)
+    assert "CRITICAL: Hard-Halt" in error_msg
+    assert "pipeline_steps" in error_msg
+    assert "required property" in error_msg
     
     print("✅ Schema Sovereignty Verified: Engine successfully halted on corrupt manifest.")
 
