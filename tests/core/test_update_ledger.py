@@ -3,9 +3,8 @@
 import os
 import json
 import pytest
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, mock_open
 from src.core.update_ledger import LedgerManager
-from src.core.constants import SystemPaths, OrchestrationStatus
 
 class TestLedgerForensics:
     
