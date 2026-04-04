@@ -1,7 +1,6 @@
 # tests/behavior/test_silent_audit.py
 
 import json
-import pytest
 from src.core.state_engine import OrchestrationState
 from src.core.constants import OrchestrationStatus
 
