@@ -12,23 +12,24 @@ else
 fi
 
 echo "--- 🔍 [2/4] SOURCE CONTRACT AUDIT ---"
-echo "Line-by-line check of Bootloader's Path expectations:"
-cat -n src/core/bootloader.py | grep -C 3 "schema/"
+echo "Line 51 of src/core/state_engine.py (The hydration failure):"
+cat -n src/core/state_engine.py | sed -n '45,65p'
 
-echo "Checking LedgerManager.log_scan signature for 'gap' parameter:"
-cat -n src/core/update_ledger.py | grep -A 2 "def log_scan"
+echo "Checking LedgerManager.log_scan signature in src/core/update_ledger.py:"
+cat -n src/core/update_ledger.py | grep -A 3 "def log_scan"
 
 echo "--- 📜 [3/4] ENV VAR & PATH RECON ---"
 echo "PYTHONPATH: $PYTHONPATH"
 
 echo "--- 🔧 [4/4] AUTOMATED REPAIR CANDIDATES (CI-ONLY) ---"
-# Use these sed commands in your CI pipeline to fix paths without touching repo source:
+# These 'sed' commands allow you to test fixes without committing to the core repo.
+# Copy these into your GitHub Action step before running pytest.
 
-# Fix 1: Force LedgerManager to create missing subdirs for audit logs
-# sed -i 's/with open(self.log_path/os.makedirs(os.path.dirname(self.log_path), exist_ok=True); with open(self.log_path/' src/core/update_ledger.py
+# Fix A: Fix the signature mismatch where tests expect a 'gap' argument but code lacks it.
+# sed -i 's/def log_scan(self, project_id, status):/def log_scan(self, project_id, status, gap=None):/' src/core/update_ledger.py
 
-# Fix 2: Patch the 'gap' TypeError in LedgerManager if the test expects it
-# sed -i 's/def log_scan(self):/def log_scan(self, gap=None):/' src/core/update_ledger.py
+# Fix B: Ensure LedgerManager creates subdirectories for audit logs automatically.
+# sed -i '/with open(self.log_path, "w"/i \            os.makedirs(os.path.dirname(self.log_path), exist_ok=True)' src/core/update_ledger.py
 
-# Fix 3: Redirect the Hardcoded Schema Path to an Absolute Path (Non-Destructive)
-# sed -i "s|'schema/|'$(pwd)/schema/|g" src/core/bootloader.py
+# Fix C: Force the schema path to be absolute to prevent CWD-related hydration failures.
+# sed -i "s|self.schema_path = 'schema/manifest_schema.json'|self.schema_path = os.path.join(os.path.dirname(__file__), '../../schema/manifest_schema.json')|g" src/core/state_engine.py
