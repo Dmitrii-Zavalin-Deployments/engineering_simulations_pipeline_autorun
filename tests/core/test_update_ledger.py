@@ -23,26 +23,28 @@ class TestLedgerForensics:
 
     def test_record_event_read_failure_recovery(self, manager):
         """Covers Lines 53-55: Ensures 'existing_content' resets to empty on read error."""
-        # 1. Setup: Create a real file on the disk to ensure os.path.exists passes
+        # 1. Setup: Physical file for the 'os.path.exists' check (Line 48)
         with open(manager.log_path, "w", encoding="utf-8") as f:
             f.write("Initial Content")
         
-        # 2. Execution: Use a mock to simulate a Read Failure followed by a Write Success
         m = mock_open()
-        # 1st call (read) triggers IOError, 2nd call (write) returns the mock handle
-        m.side_effect = [IOError("Read Denied"), m.return_value]
+        
+        # 2. Logic-based Side Effect: Prevents StopIteration
+        def mocked_open_logic(path, mode, *args, **kwargs):
+            if "r" in mode:
+                raise IOError("Read Denied")
+            return m.return_value
 
-        with patch("builtins.open", m):
+        with patch("builtins.open", side_effect=mocked_open_logic):
+            # Line 50 fails (IOError), Line 58 succeeds (m.return_value)
             manager.record_event("RECOVERY_TEST", "Message")
             
-            # 3. Verification: Inspect the Mock's internal write buffer
-            # This avoids the F821 Undefined Name error and bypasses I/O sync issues
+            # 3. Verification: Inspect the Mock Handle
             handle = m()
-            # Capture all data written to the mock during this session
+            # Capture all data written to the mock
             written_data = "".join(call.args[0] for call in handle.write.call_args_list)
             
-            # Logic Audit: 
-            # If Line 55 worked, 'Initial Content' was purged from the buffer.
+            # If Line 55 worked, 'Initial Content' was purged from the buffer
             assert "RECOVERY_TEST" in written_data
             assert "Initial Content" not in written_data
 
