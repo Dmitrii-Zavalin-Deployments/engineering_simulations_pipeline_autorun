@@ -1,7 +1,6 @@
 # tests/behavior/test_boot_hydration.py
 
 import json
-import pytest
 from src.core.bootloader import Bootloader
 from src.core.state_engine import OrchestrationState
 
