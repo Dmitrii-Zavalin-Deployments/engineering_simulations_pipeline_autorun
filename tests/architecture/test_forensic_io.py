@@ -34,7 +34,7 @@ def test_schema_sovereignty_enforcement():
     with pytest.raises(RuntimeError) as excinfo:
         Bootloader._validate_integrity(malformed_data, "non_existent_schema.json")
     
-    assert "SCHEMA BREACH" in str(excinfo.value) or "FileNotFoundError" in str(excinfo.value)
+    assert "CRITICAL:" in str(excinfo.value) and "corrupt or invalid" in str(excinfo.value)
     print("✅ Rule 4 Verified: Schema Sovereignty enforced by Bootloader.")
 
 def test_path_reconstruction_logic(tmp_path):
