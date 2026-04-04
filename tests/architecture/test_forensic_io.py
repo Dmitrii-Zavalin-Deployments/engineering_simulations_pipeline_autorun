@@ -1,10 +1,7 @@
 # tests/architecture/test_forensic_io.py
 
 import pytest
-from pathlib import Path
-from src.io.download_from_dropbox import CloudIngestor
 from src.core.bootloader import Bootloader
-from src.core.constants import SystemPaths
 
 def test_clean_room_binary_integrity(tmp_path, monkeypatch):
     """
@@ -52,7 +49,7 @@ def test_path_reconstruction_logic(tmp_path):
     # Simulation of os.path.relpath(entry.path_lower, src_base)
     import os
     rel_path = os.path.relpath(cloud_path.lower(), source_root.lower())
-    local_dest = tmp_path / rel_path
+    tmp_path / rel_path
     
     assert str(rel_path) == "project_alpha/data.csv", "❌ PATH DRIFT: Incorrect relative reconstruction."
     print(f"✅ Rule 1 Verified: Local topography matches Cloud: {rel_path}")
