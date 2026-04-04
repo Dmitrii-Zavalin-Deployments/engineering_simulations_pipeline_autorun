@@ -16,7 +16,10 @@ class TestOrchestrationStatePhysical:
         config_dir = tmp_path / "config"
         data_dir = tmp_path / "data"
         schema_dir = tmp_path / "schema"
-        for d in [config_dir, data_dir, schema_dir]: d.mkdir()
+        
+        # Fixed E701: Expanded loop for linter compliance
+        for d in [config_dir, data_dir, schema_dir]:
+            d.mkdir()
 
         # Patch SystemPaths to use our tmp directories
         monkeypatch.setattr("src.core.constants.SystemPaths.SCHEMA_DIR", str(schema_dir))
@@ -28,7 +31,10 @@ class TestOrchestrationStatePhysical:
         }))
 
         schema_file = schema_dir / SystemPaths.MANIFEST_SCHEMA
-        schema_file.write_text(json.dumps({"type": "object", "required": ["project_id", "manifest_id"]}))
+        schema_file.write_text(json.dumps({
+            "type": "object", 
+            "required": ["project_id", "manifest_id"]
+        }))
 
         ledger_path = config_dir / "ledger.json"
         
@@ -58,10 +64,13 @@ class TestOrchestrationStatePhysical:
         state = OrchestrationState(state_setup["config"], state_setup["data"], state_setup["ledger"])
         
         with patch("src.core.state_engine.logger") as mock_logger:
-            # Trigger error by attempting to write to a directory as a file
+            # Fixed: Trigger OSError by pointing ledger path to an existing directory
             state.ledger_path = Path(state_setup["data"]) 
             state.save_ledger({})
-            mock_logger.error.assert_any_call(pytest.match("❌ Persistence Error.*"))
+            
+            # Verify the log was called with the correct prefix
+            args, _ = mock_logger.error.call_args
+            assert "❌ Persistence Error" in args[0]
 
     def test_reconcile_without_hydration_fails(self, state_setup):
         """Line 121-123: Guard against scanning before hydration."""
@@ -84,27 +93,23 @@ class TestOrchestrationStatePhysical:
             }]
         })
 
-        # --- CASE: Input Loss (PENDING -> WAITING) ---
-        # Ledger says PENDING, but physical input is missing
+        # --- CASE 1: Input Loss (PENDING -> WAITING) ---
         ledger = {"step_alpha": {"status": OrchestrationStatus.PENDING.value}}
         state.reconcile_and_heal(ledger)
         assert ledger["step_alpha"]["status"] == OrchestrationStatus.WAITING.value
 
-        # --- CASE: Artifact Drift (COMPLETED -> WAITING) ---
-        # Ledger says COMPLETED, but physical output is missing
+        # --- CASE 2: Artifact Drift (COMPLETED -> WAITING) ---
         ledger = {"step_alpha": {"status": OrchestrationStatus.COMPLETED.value}}
         state.reconcile_and_heal(ledger)
         assert ledger["step_alpha"]["status"] == OrchestrationStatus.WAITING.value
 
-        # --- CASE: FAILED Recovery (FAILED -> PENDING) ---
-        # Input exists, so we move back to PENDING to retry
+        # --- CASE 3: FAILED Recovery (FAILED -> PENDING) ---
         Path(state_setup["data"], "in.txt").write_text("data")
         ledger = {"step_alpha": {"status": OrchestrationStatus.FAILED.value}}
         state.reconcile_and_heal(ledger)
         assert ledger["step_alpha"]["status"] == OrchestrationStatus.PENDING.value
 
-        # --- CASE: FAILED Recovery (FAILED -> WAITING) ---
-        # Input is gone, so we reset to WAITING
+        # --- CASE 4: FAILED Recovery (FAILED -> WAITING) ---
         os.remove(Path(state_setup["data"], "in.txt"))
         ledger = {"step_alpha": {"status": OrchestrationStatus.FAILED.value}}
         state.reconcile_and_heal(ledger)
