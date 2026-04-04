@@ -23,25 +23,25 @@ class TestLedgerForensics:
 
     def test_record_event_read_failure_recovery(self, manager):
         """Covers Lines 53-55: Ensures 'existing_content' resets to empty on read error."""
-        # 1. Seed the real filesystem
+        # 1. Setup: Create a real file on the disk
         with open(manager.log_path, "w", encoding="utf-8") as f:
             f.write("Initial Content")
         
+        # 2. Execution: Patch ONLY during the call
         m = mock_open()
-        # Side effect: 1st call (read) fails, 2nd call (write) succeeds
         m.side_effect = [IOError("Read Denied"), m.return_value]
 
-        # 2. Patch ONLY during the event recording
         with patch("builtins.open", m):
             manager.record_event("RECOVERY_TEST", "Message")
             
-        # 3. Verify using the REAL filesystem (outside the patch)
+        # 3. Verification: Check the REAL filesystem
+        # We DO NOT use patch here. We look at the actual artifact.
         with open(manager.log_path, "r", encoding="utf-8") as f:
             content = f.read()
-            # Success logic: If read failed at Line 54, existing_content was wiped.
-            # Thus, 'Initial Content' must be GONE.
-            assert "RECOVERY_TEST" in content
-            assert "Initial Content" not in content
+            
+        # If the engine healed itself, 'Initial Content' MUST be gone.
+        assert "RECOVERY_TEST" in content
+        assert "Initial Content" not in content
 
     def test_record_event_critical_write_failure(self, manager):
         """Covers Lines 60-62: Specifically targets the WRITE IOError."""
