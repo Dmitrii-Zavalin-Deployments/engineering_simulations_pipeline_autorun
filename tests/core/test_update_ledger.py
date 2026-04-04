@@ -33,12 +33,15 @@ class TestLedgerForensics:
 
         with patch("builtins.open", m):
             manager.record_event("RECOVERY_TEST", "Message")
+        # Verify mock received the write call with wiped existing_content
+        handle = m()
+        # The write call must contain the new entry but NOT the old one
+        written_data = ''.join(call.args[0] for call in handle.write.call_args_list)
+        assert 'RECOVERY_TEST' in written_data
+        assert 'Initial Content' not in written_data
             
         # 3. Verification: Check the REAL filesystem
         # We DO NOT use patch here. We look at the actual artifact.
-        with open(manager.log_path, "r", encoding="utf-8") as f:
-            content = f.read()
-            
         # If the engine healed itself, 'Initial Content' MUST be gone.
         assert "RECOVERY_TEST" in content
         assert "Initial Content" not in content
