@@ -57,10 +57,17 @@ class TestMainEnginePhysical:
         (config_dir / "dormant.flag").write_text("STATUS: DORMANT")
 
         with patch("src.main_engine.logger") as mock_logger:
-            # We must still mock hydrate because it hits the network (GitHub raw)
-            # but we allow the rest of the engine to run physically.
             with patch("src.core.bootloader.Bootloader.hydrate") as mock_hydrate:
-                mock_hydrate.return_value = {"steps": {}}
+                # SIDE EFFECT: Physically unlock the state object by populating manifest_data
+                def hydrate_side_effect(state_obj):
+                    state_obj.hydrate_manifest({
+                        "manifest_id": "TEST-MID",
+                        "project_id": "TEST-PROJ",
+                        "pipeline_steps": []
+                    })
+                    return {"steps": {}}
+                
+                mock_hydrate.side_effect = hydrate_side_effect
                 run_engine()
                 mock_logger.info.assert_any_call("✅ MISSION COMPLETE: All artifacts present. System entering hibernation.")
 
@@ -68,7 +75,7 @@ class TestMainEnginePhysical:
         """Verify dispatching works when 'input.csv' physically exists on disk."""
         config_dir, data_dir, _ = nomadic_node
 
-        # 1. Setup Physical Config & Ledger
+        # 1. Setup Physical Config
         (config_dir / "active_disk.json").write_text(json.dumps({
             "project_id": "TEST-PROJ",
             "manifest_url": "https://raw.githubusercontent.com/dummy/manifest.json"
@@ -77,19 +84,32 @@ class TestMainEnginePhysical:
         # 2. Physically create the 'requires' artifact
         (data_dir / "input.csv").write_text("artifact data")
 
-        # 3. Simulate Hydrated Ledger Data
-        hydrated_data = {
-            "steps": {
-                "alpha_solver": {
-                    "status": OrchestrationStatus.WAITING.value,
-                    "timeout_hours": 6,
-                    "target_repo": "nomad/alpha-worker"
+        with patch("src.core.bootloader.Bootloader.hydrate") as mock_hydrate:
+            def dispatch_side_effect(state_obj):
+                # Populate the manifest with the required step definition
+                state_obj.hydrate_manifest({
+                    "manifest_id": "TEST-MID",
+                    "project_id": "TEST-PROJ",
+                    "pipeline_steps": [{
+                        "name": "alpha_solver",
+                        "requires": ["input.csv"],
+                        "produces": ["output.csv"],
+                        "timeout_hours": 6,
+                        "target_repo": "nomad/alpha-worker"
+                    }]
+                })
+                return {
+                    "steps": {
+                        "alpha_solver": {
+                            "status": OrchestrationStatus.WAITING.value,
+                            "timeout_hours": 6,
+                            "target_repo": "nomad/alpha-worker"
+                        }
+                    }
                 }
-            }
-        }
-
-        with patch("src.core.bootloader.Bootloader.hydrate", return_value=hydrated_data):
-            # We mock the API trigger to avoid actual GitHub calls
+            
+            mock_hydrate.side_effect = dispatch_side_effect
+            
             with patch("src.api.github_trigger.Dispatcher.trigger_worker", return_value=True) as mock_trigger:
                 run_engine()
                 
@@ -109,12 +129,18 @@ class TestMainEnginePhysical:
             "steps": {}
         }))
 
-        # 2. Mock Hydrate returning NEW data
-        new_data = {"metadata": {"project_id": "P1", "manifest_id": "NEW"}, "steps": {}}
-
-        with patch("src.core.bootloader.Bootloader.hydrate", return_value=new_data):
+        with patch("src.core.bootloader.Bootloader.hydrate") as mock_hydrate:
+            def sync_side_effect(state_obj):
+                state_obj.hydrate_manifest({
+                    "manifest_id": "NEW",
+                    "project_id": "P1",
+                    "pipeline_steps": []
+                })
+                return {"metadata": {"project_id": "P1", "manifest_id": "NEW"}, "steps": {}}
+            
+            mock_hydrate.side_effect = sync_side_effect
             run_engine()
             
-            # Verify the physical file was updated/overwritten by the engine
+            # Verify the physical file was updated/overwritten by the engine logic
             updated_ledger = json.loads(ledger_path.read_text())
             assert updated_ledger["metadata"]["project_id"] == "P1"
