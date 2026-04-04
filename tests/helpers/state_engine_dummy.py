@@ -22,9 +22,10 @@ class StateEngineDummy:
     ) -> Tuple[OrchestrationState, Path]:
         """
         Creates a physical nomadic node environment including the /schema directory.
-        Now includes orchestration_ledger pathing to satisfy the new OS signature.
+        Satisfies the OrchestrationState signature and enforces path-locality for tests.
         """
         # 1. Define Paths based on SystemPaths (Rule 4)
+        # We use tmp_path as the 'Physical Node Root' for this test execution
         config_dir = tmp_path / SystemPaths.CONFIG_DIR
         schema_dir = tmp_path / SystemPaths.SCHEMA_DIR
         data_dir = tmp_path / SystemPaths.DATA_DIR
@@ -32,10 +33,11 @@ class StateEngineDummy:
         for directory in [config_dir, schema_dir, data_dir]:
             directory.mkdir(parents=True, exist_ok=True)
         
-        # New: Define the ledger path inside the mock config directory
+        # Define the ledger path inside the mock config directory
         ledger_path = config_dir / SystemPaths.LEDGER
 
         # 2. Create the Manifest Schema (Rule 4 Compliance)
+        # This prevents FileNotFoundError during hydration
         manifest_schema_path = schema_dir / SystemPaths.MANIFEST_SCHEMA
         manifest_schema_content = {
             "$schema": "http://json-schema.org/draft-07/schema#",
@@ -95,15 +97,16 @@ class StateEngineDummy:
                 }
             ]
 
-        # 6. Instantiate and Hydrate the Real Class
-        # UPDATED: Now passing 3 arguments (config, data, ledger)
-        state = OrchestrationState(
-            config_path=str(config_path), 
-            data_root=str(data_dir), 
-            ledger_path=str(ledger_path)
-        )
+        # 6. Instantiate the Real Class with Test-Local Paths
+        # This overrides the production default 'schema/' with the temp one
+        state = OrchestrationState()
+        state.config_path = str(config_path)
+        state.data_root = str(data_dir)
+        state.ledger_path = str(ledger_path)
+        state.schema_path = str(manifest_schema_path) # Critical fix: point directly to the temp schema
         
-        # Manual hydration for test isolation
+        # 7. Manual hydration for test isolation
+        # This will now succeed because state.schema_path exists on disk
         state.hydrate_manifest({
             "manifest_id": manifest_id,
             "project_id": project_id,

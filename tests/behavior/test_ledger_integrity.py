@@ -25,7 +25,7 @@ def nomadic_env(tmp_path):
     config_dir.mkdir(parents=True)
     
     # 2. Mirror Physical Schemas (Asset Injection)
-    # This allows Bootloader to find 'schema/manifest_schema.json' in the test sandbox
+    # This allows Bootloader/StateEngine to find schemas in the test sandbox
     project_root = Path(__file__).resolve().parent.parent.parent
     real_schema_dir = project_root / "schema"
     test_schema_dir = root / "schema"
@@ -101,7 +101,7 @@ def test_identity_mismatch_forensic_reset_HYBRID(nomadic_env, new_pid, new_mid):
     INTERNAL REALITY: The disk wipe and file rewrite are REAL.
     PATH PATCH: Redirects Bootloader to look at the mirrored test schema.
     """
-    # 1. Setup State and Data
+    # 1. Setup State and Data via Dummy (Passing nomadic_env["root"] is critical)
     state, _ = StateEngineDummy.create(nomadic_env["root"])
     state.ledger_path = nomadic_env["ledger"]
 
@@ -139,6 +139,7 @@ def test_identity_mismatch_forensic_reset_HYBRID(nomadic_env, new_pid, new_mid):
     # 5. Physical Verification
     updated = json.loads(nomadic_env["ledger"].read_text())
     
+    # If this passes, it proves the code physically wiped the file on disk
     assert "poison_step" not in updated["steps"], "Logic error: Poison step survived on disk."
     assert updated["metadata"]["project_id"] == new_pid
     assert "fresh_start" in updated["steps"]
