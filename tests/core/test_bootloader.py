@@ -114,3 +114,54 @@ class TestBootloaderForensics:
         
         with pytest.raises(RuntimeError, match="CRITICAL: Hydration failure"):
             Bootloader.hydrate(mock_state)
+    
+    def test_hydrate_recovery_from_corruption(self, mock_env):
+        """Covers Lines 92-93: Recovery from Corrupt JSON or Missing Keys."""
+        # 1. Simulate a corrupted Ledger file (Invalid JSON)
+        ledger_path = mock_env["config"] / "ledger.json"
+        ledger_path.write_text("{ incomplete_json: ", encoding="utf-8")
+
+        # 2. Setup mock manifest to allow re-seeding
+        manifest_url = "http://api.nomad.com/manifest"
+        responses.add(responses.GET, manifest_url, json={
+            "project_id": "P1", "manifest_id": "M1", "pipeline_steps": []
+        }, status=200)
+
+        # 3. Setup Active Disk (local entry point)
+        (Path(SystemPaths.CONFIG_DIR) / SystemPaths.ACTIVE_DISK).write_text(
+            json.dumps({"project_id": "P1"}), encoding="utf-8"
+        )
+
+        mock_state = MagicMock()
+        mock_state.manifest_url = manifest_url
+        mock_state.ledger_path = str(ledger_path)
+
+        # This should NOT raise an error; it should catch the JSONDecodeError and reset.
+        ledger_content = Bootloader.hydrate(mock_state)
+        
+        assert ledger_content["metadata"]["project_id"] == "P1"
+        # Verify the file was overwritten with valid data
+        assert json.loads(ledger_path.read_text())["metadata"]["project_id"] == "P1"
+
+    def test_hydrate_recovery_from_missing_metadata(self, mock_env):
+        """Covers Lines 92-93: Recovery when JSON is valid but keys are missing."""
+        ledger_path = mock_env["config"] / "ledger.json"
+        # Valid JSON, but missing the "metadata" key required by Line 88
+        ledger_path.write_text(json.dumps({"wrong_key": "data"}), encoding="utf-8")
+
+        manifest_url = "http://api.nomad.com/manifest"
+        responses.add(responses.GET, manifest_url, json={
+            "project_id": "P1", "manifest_id": "M1", "pipeline_steps": []
+        }, status=200)
+
+        (Path(SystemPaths.CONFIG_DIR) / SystemPaths.ACTIVE_DISK).write_text(
+            json.dumps({"project_id": "P1"}), encoding="utf-8"
+        )
+
+        mock_state = MagicMock()
+        mock_state.manifest_url = manifest_url
+        mock_state.ledger_path = str(ledger_path)
+
+        # Execution should trigger the KeyError, catch it, and reset.
+        ledger_content = Bootloader.hydrate(mock_state)
+        assert "metadata" in ledger_content
