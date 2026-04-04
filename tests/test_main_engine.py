@@ -2,10 +2,9 @@
 
 import pytest
 import json
-from pathlib import Path
 from unittest.mock import patch
 
-from src.core.constants import OrchestrationStatus, SystemPaths
+from src.core.constants import OrchestrationStatus
 from src.main_engine import run_engine
 
 class TestMainEnginePhysical:
