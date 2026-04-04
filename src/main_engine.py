@@ -112,5 +112,5 @@ def run_engine():
 
     logger.info("🏁 Cycle Complete: All identified ready-tasks dispatched.")
 
-if __name__ == "__main__":
+if __name__ == "__main__": # pragma: no cover
     run_engine()

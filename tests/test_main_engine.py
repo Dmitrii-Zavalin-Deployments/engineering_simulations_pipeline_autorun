@@ -152,3 +152,91 @@ class TestMainEnginePhysical:
             # Verify the physical file was updated/overwritten by the engine logic
             updated_ledger = json.loads(ledger_path.read_text())
             assert updated_ledger["metadata"]["project_id"] == "P1"
+
+    def test_pulse_idle_in_flight(self, nomadic_node):
+        """Rule 1: Verify 'PULSE IDLE' log when workers are already IN_PROGRESS."""
+        config_dir, _, _ = nomadic_node
+        (config_dir / "active_disk.json").write_text(json.dumps({
+            "project_id": "PROJ-FLIGHT",
+            "manifest_url": "..."
+        }))
+
+        with patch("src.main_engine.logger") as mock_logger:
+            with patch("src.core.bootloader.Bootloader.hydrate") as mock_hydrate:
+                def hydrate_in_flight(state_obj):
+                    state_obj.hydrate_manifest({
+                        "manifest_id": "M-FLIGHT",
+                        "project_id": "PROJ-FLIGHT",
+                        "pipeline_steps": [{"name": "worker_a", "requires": [], "produces": ["out.csv"]}]
+                    })
+                    # Simulate a step that is already triggered and running
+                    return {"steps": {"worker_a": {"status": OrchestrationStatus.IN_PROGRESS.value}}}
+                
+                mock_hydrate.side_effect = hydrate_in_flight
+                run_engine()
+                
+                # Check for the 'Awaiting arrival' pulse idle message
+                mock_logger.info.assert_any_call("⏳ PULSE IDLE: Workers are currently in-flight. Awaiting arrival.")
+
+    def test_dispatch_api_failure_handling(self, nomadic_node):
+        """Verify error logging when the Dispatcher API returns False."""
+        config_dir, data_dir, _ = nomadic_node
+        (config_dir / "active_disk.json").write_text(json.dumps({
+            "project_id": "PROJ-FAIL", "manifest_url": "..."
+        }))
+        (data_dir / "input.csv").write_text("trigger_data")
+
+        with patch("src.main_engine.logger") as mock_logger:
+            with patch("src.core.bootloader.Bootloader.hydrate") as mock_hydrate:
+                def hydrate_ready(state_obj):
+                    state_obj.hydrate_manifest({
+                        "manifest_id": "M-FAIL",
+                        "project_id": "PROJ-FAIL",
+                        "pipeline_steps": [{
+                            "name": "fail_step",
+                            "requires": ["input.csv"],
+                            "produces": ["out.csv"],
+                            "target_repo": "org/fail-repo",
+                            "timeout_hours": 1
+                        }]
+                    })
+                    return {"steps": {"fail_step": {"status": OrchestrationStatus.WAITING.value}}}
+                
+                mock_hydrate.side_effect = hydrate_ready
+                
+                # Mock trigger_worker to return False (API Failure)
+                with patch("src.api.github_trigger.Dispatcher.trigger_worker", return_value=False):
+                    run_engine()
+                    mock_logger.error.assert_any_call("❌ DISPATCH FAILED: org/fail-repo - Manual check required.")
+
+    def test_protocol_breach_missing_manifest_key(self, nomadic_node):
+        """Rule 4: Hard-Halt (SystemExit) if manifest is missing mandatory keys during dispatch."""
+        config_dir, data_dir, _ = nomadic_node
+        (config_dir / "active_disk.json").write_text(json.dumps({
+            "project_id": "PROJ-BREACH", "manifest_url": "..."
+        }))
+        (data_dir / "input.csv").write_text("data")
+
+        with patch("src.main_engine.logger") as mock_logger:
+            with patch("src.core.bootloader.Bootloader.hydrate") as mock_hydrate:
+                def hydrate_malformed(state_obj):
+                    # We omit 'target_repo' or 'timeout_hours' which the dispatch loop expects
+                    state_obj.hydrate_manifest({
+                        "manifest_id": "M-BREACH",
+                        "project_id": "PROJ-BREACH",
+                        "pipeline_steps": [{
+                            "name": "broken_step",
+                            "requires": ["input.csv"],
+                            "produces": ["out.csv"]
+                            # 'target_repo' is missing!
+                        }]
+                    })
+                    return {"steps": {"broken_step": {"status": OrchestrationStatus.WAITING.value}}}
+                
+                mock_hydrate.side_effect = hydrate_malformed
+                
+                with pytest.raises(SystemExit) as e:
+                    run_engine()
+                
+                assert e.value.code == 1
+                mock_logger.critical.assert_any_call("Protocol Breach: Missing mandatory manifest key 'target_repo'")
