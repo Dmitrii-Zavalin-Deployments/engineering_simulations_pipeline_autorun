@@ -1,7 +1,6 @@
 # tests/behavior/test_silent_audit.py
 
 import json
-import pytest
 from src.core.state_engine import OrchestrationState
 from src.core.constants import OrchestrationStatus
 
@@ -57,7 +56,7 @@ def test_atomic_persistence_audit(tmp_path):
     assert step_name in actual_ledger, f"❌ KeyError: {step_name} missing from disk. Found: {list(disk_data.keys())}"
     assert actual_ledger[step_name]["status"] == OrchestrationStatus.PENDING.value
     
-    print(f"✅ Audit Gate Verified: Ledger on disk reflects PENDING state.")
+    print("✅ Audit Gate Verified: Ledger on disk reflects PENDING state.")
 
 def test_audit_traceability_sequence(tmp_path):
     """
