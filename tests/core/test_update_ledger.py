@@ -23,38 +23,38 @@ class TestLedgerForensics:
 
     def test_record_event_read_failure_recovery(self, manager):
         """Covers Lines 53-55: Ensures 'existing_content' resets to empty on read error."""
-        # Pre-seed the file so we know it exists (triggering the 'if os.path.exists' block)
+        # 1. Create the file physically so the 'if os.path.exists' check passes
         with open(manager.log_path, "w") as f:
             f.write("Initial Content")
         
-        # We mock open to fail on the 'r' (read) mode but succeed on 'w' (write)
-        def mocked_open_logic(path, mode, *args, **kwargs):
-            if 'r' in mode:
-                raise IOError("Read Denied")
-            return mock_open()()
+        # 2. Mock: First open (read) fails, Second open (write) succeeds
+        m = mock_open()
+        m.side_effect = [IOError("Read Denied"), m.return_value]
 
-        with patch("builtins.open", side_effect=mocked_open_logic):
+        with patch("builtins.open", m):
             manager.record_event("RECOVERY_TEST", "Message")
             
-        # Verify it re-initialized correctly
+        # 3. FIX: The final file should contain the NEW entry but NOT the OLD one
+        # because Line 55 reset existing_content to "" after the read failure.
         with open(manager.log_path, "r") as f:
             content = f.read()
             assert "RECOVERY_TEST" in content
-            # If recovery worked, 'Initial Content' should NOT be here 
-            # because existing_content was reset to ""
             assert "Initial Content" not in content
 
     def test_record_event_critical_write_failure(self, manager):
         """Covers Lines 60-62: Specifically targets the WRITE IOError."""
-        # We need the first open (read) to succeed (return empty) 
-        # and the second open (write) to fail.
+        # Rule 5 Compliance: Sequential Mocking for Atomic Audit Trail
         m = mock_open()
-        # Side effect: 1st call (read) returns a mock file, 2nd call (write) raises error
+        
+        # 1st call (Line 50: read) returns valid mock handle to pass first try-block
+        # 2nd call (Line 58: write) raises IOError to trigger critical failure path
         m.side_effect = [m.return_value, IOError("Disk Full")]
 
         with patch("builtins.open", m):
             with pytest.raises(RuntimeError, match="Could not update performance audit"):
-                # This will call open twice: once at line 50, once at line 58
+                # Execution Trace: 
+                # 1. open(log, "r") -> Success (Line 50)
+                # 2. open(log, "w") -> IOError -> logger.critical (Line 58)
                 manager.record_event("FAIL", "This should crash")
 
     # --- SECTION 2: ORCHESTRATION MEMORY (JSON) COVERAGE ---
