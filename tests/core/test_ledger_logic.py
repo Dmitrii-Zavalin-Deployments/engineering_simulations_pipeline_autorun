@@ -52,7 +52,7 @@ def test_audit_consistency_sequence(audit_env):
     
     # 1. Simulate the Engine Loop
     # Phase A: Forensic Scan
-    manager.log_scan(project_id, f"GAP_DETECTED: power_station_solver")
+    manager.log_scan(project_id, "GAP_DETECTED: power_station_solver")
     
     # Phase B: Dispatching a Worker
     manager.log_dispatch(
