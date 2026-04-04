@@ -23,39 +23,38 @@ class TestLedgerForensics:
 
     def test_record_event_read_failure_recovery(self, manager):
         """Covers Lines 53-55: Ensures 'existing_content' resets to empty on read error."""
-        # 1. Create the file physically so the 'if os.path.exists' check passes
-        with open(manager.log_path, "w") as f:
+        # 1. Seed the real filesystem
+        with open(manager.log_path, "w", encoding="utf-8") as f:
             f.write("Initial Content")
         
-        # 2. Mock: First open (read) fails, Second open (write) succeeds
         m = mock_open()
+        # Side effect: 1st call (read) fails, 2nd call (write) succeeds
         m.side_effect = [IOError("Read Denied"), m.return_value]
 
+        # 2. Patch ONLY during the event recording
         with patch("builtins.open", m):
             manager.record_event("RECOVERY_TEST", "Message")
             
-        # 3. FIX: The final file should contain the NEW entry but NOT the OLD one
-        # because Line 55 reset existing_content to "" after the read failure.
-        with open(manager.log_path, "r") as f:
+        # 3. Verify using the REAL filesystem (outside the patch)
+        with open(manager.log_path, "r", encoding="utf-8") as f:
             content = f.read()
+            # Success logic: If read failed at Line 54, existing_content was wiped.
+            # Thus, 'Initial Content' must be GONE.
             assert "RECOVERY_TEST" in content
             assert "Initial Content" not in content
 
     def test_record_event_critical_write_failure(self, manager):
         """Covers Lines 60-62: Specifically targets the WRITE IOError."""
-        # Rule 5 Compliance: Sequential Mocking for Atomic Audit Trail
         m = mock_open()
-        
-        # 1st call (Line 50: read) returns valid mock handle to pass first try-block
-        # 2nd call (Line 58: write) raises IOError to trigger critical failure path
-        m.side_effect = [m.return_value, IOError("Disk Full")]
-
-        with patch("builtins.open", m):
-            with pytest.raises(RuntimeError, match="Could not update performance audit"):
-                # Execution Trace: 
-                # 1. open(log, "r") -> Success (Line 50)
-                # 2. open(log, "w") -> IOError -> logger.critical (Line 58)
-                manager.record_event("FAIL", "This should crash")
+        # We must allow the os.path.exists check to pass to reach Line 50
+        with patch("os.path.exists", return_value=True):
+            # 1st call (Line 50: read) succeeds
+            # 2nd call (Line 58: write) fails
+            m.side_effect = [m.return_value, IOError("Disk Full")]
+            
+            with patch("builtins.open", m):
+                with pytest.raises(RuntimeError, match="Could not update performance audit"):
+                    manager.record_event("FAIL", "Critical write test")
 
     # --- SECTION 2: ORCHESTRATION MEMORY (JSON) COVERAGE ---
 
