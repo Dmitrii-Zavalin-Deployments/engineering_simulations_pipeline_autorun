@@ -2,8 +2,7 @@
 
 import pytest
 import responses
-import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from src.api.github_trigger import Dispatcher
 from src.core.constants import OrchestrationStatus
 
