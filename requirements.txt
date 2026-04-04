@@ -20,3 +20,4 @@ vulture==2.10             # Dead-code elimination for "Lean Wiring"
 # Phase C, Rule 2: Zero-Debt Mandate
 pytest==7.4.3             # Real-disk I/O validation
 pytest-cov==4.1.0         # Enforces 100% coverage mandate
+responses==0.24.1         # Mocking Network I/O for Forensic Integrity Checks
