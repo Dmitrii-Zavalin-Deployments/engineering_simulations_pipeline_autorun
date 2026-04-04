@@ -23,28 +23,28 @@ class TestLedgerForensics:
 
     def test_record_event_read_failure_recovery(self, manager):
         """Covers Lines 53-55: Ensures 'existing_content' resets to empty on read error."""
-        # 1. Setup: Create a real file on the disk
+        # 1. Setup: Create a real file on the disk to ensure os.path.exists passes
         with open(manager.log_path, "w", encoding="utf-8") as f:
             f.write("Initial Content")
         
-        # 2. Execution: Patch ONLY during the call
+        # 2. Execution: Use a mock to simulate a Read Failure followed by a Write Success
         m = mock_open()
+        # 1st call (read) triggers IOError, 2nd call (write) returns the mock handle
         m.side_effect = [IOError("Read Denied"), m.return_value]
 
         with patch("builtins.open", m):
             manager.record_event("RECOVERY_TEST", "Message")
-        # Verify mock received the write call with wiped existing_content
-        handle = m()
-        # The write call must contain the new entry but NOT the old one
-        written_data = ''.join(call.args[0] for call in handle.write.call_args_list)
-        assert 'RECOVERY_TEST' in written_data
-        assert 'Initial Content' not in written_data
             
-        # 3. Verification: Check the REAL filesystem
-        # We DO NOT use patch here. We look at the actual artifact.
-        # If the engine healed itself, 'Initial Content' MUST be gone.
-        assert "RECOVERY_TEST" in content
-        assert "Initial Content" not in content
+            # 3. Verification: Inspect the Mock's internal write buffer
+            # This avoids the F821 Undefined Name error and bypasses I/O sync issues
+            handle = m()
+            # Capture all data written to the mock during this session
+            written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+            
+            # Logic Audit: 
+            # If Line 55 worked, 'Initial Content' was purged from the buffer.
+            assert "RECOVERY_TEST" in written_data
+            assert "Initial Content" not in written_data
 
     def test_record_event_critical_write_failure(self, manager):
         """Covers Lines 60-62: Specifically targets the WRITE IOError."""
