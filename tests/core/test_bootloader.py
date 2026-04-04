@@ -167,3 +167,44 @@ class TestBootloaderForensics:
         # Execution should trigger the KeyError, catch it, and reset.
         ledger_content = Bootloader.hydrate(mock_state)
         assert "metadata" in ledger_content
+
+    @responses.activate
+    def test_hydrate_first_ignition_new_file(self, mock_env):
+        """Covers Lines 94-96: Handles 'Cold Start' where ledger file does not exist."""
+        # 1. Setup path for a file that does NOT exist
+        ledger_path = mock_env["config"] / "brand_new_ledger.json"
+        if ledger_path.exists():
+            ledger_path.unlink()
+
+        # 2. Mock Remote Manifest
+        manifest_url = "http://api.nomad.com/manifest"
+        new_manifest = {
+            "project_id": "COLD_START_PROJ",
+            "manifest_id": "M_INIT",
+            "pipeline_steps": [
+                {"name": "init_step", "timeout_hours": 1, "target_repo": "worker-repo"}
+            ]
+        }
+        responses.add(responses.GET, manifest_url, json=new_manifest, status=200)
+
+        # 3. Setup local 'Active Disk'
+        (Path(SystemPaths.CONFIG_DIR) / SystemPaths.ACTIVE_DISK).write_text(
+            json.dumps({"project_id": "COLD_START_PROJ"}), encoding="utf-8"
+        )
+
+        # 4. Execute Hydration
+        mock_state = MagicMock()
+        mock_state.manifest_url = manifest_url
+        mock_state.ledger_path = str(ledger_path)
+        
+        ledger_content = Bootloader.hydrate(mock_state)
+
+        # --- VALIDATION ---
+        # Verify the 'else' block (Line 95) was triggered and should_reset became True
+        assert ledger_content["metadata"]["project_id"] == "COLD_START_PROJ"
+        assert "init_step" in ledger_content["steps"]
+        
+        # Verify Rule 1: The file was actually written to the empty disk location
+        assert ledger_path.exists()
+        saved_data = json.loads(ledger_path.read_text(encoding="utf-8"))
+        assert saved_data["metadata"]["manifest_id"] == "M_INIT"
