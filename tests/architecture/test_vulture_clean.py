@@ -2,7 +2,6 @@
 
 import subprocess
 import pytest
-import os
 
 def test_vulture_dead_code_audit():
     """
@@ -11,7 +10,7 @@ def test_vulture_dead_code_audit():
     """
     # 1. Check if vulture is installed
     try:
-        import vulture
+        pass
     except ImportError:
         pytest.skip("Vulture not installed. Run 'pip install vulture' to enforce Rule 6.")
 
