@@ -36,7 +36,8 @@ class TestBootloaderForensics:
         schema_name = "test_schema.json"
         (mock_env["schema"] / schema_name).write_text(json.dumps({"required": ["id"]}))
         
-        with pytest.raises(RuntimeError, match="SCHEMA BREACH"):
+        # FIX: Matching the actual exception string "CRITICAL: test_schema.json is corrupt..."
+        with pytest.raises(RuntimeError, match=f"CRITICAL: {schema_name} is corrupt or invalid"):
             Bootloader._validate_integrity(bad_data, schema_name)
 
     def test_mount_dormancy_reset_oserror(self, mock_env):
