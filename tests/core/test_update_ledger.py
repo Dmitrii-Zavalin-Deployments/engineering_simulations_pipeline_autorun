@@ -22,26 +22,39 @@ class TestLedgerForensics:
     # --- SECTION 1: PERFORMANCE AUDIT (MARKDOWN) COVERAGE ---
 
     def test_record_event_read_failure_recovery(self, manager):
-        """Covers Lines 53-55: Recovers when audit file exists but cannot be read."""
+        """Covers Lines 53-55: Ensures 'existing_content' resets to empty on read error."""
+        # Pre-seed the file so we know it exists (triggering the 'if os.path.exists' block)
         with open(manager.log_path, "w") as f:
             f.write("Initial Content")
         
-        # Trigger IOError during the read phase of record_event
-        with patch("builtins.open", side_effect=[IOError("Read Denied"), mock_open().return_value]):
-            manager.record_event("TEST", "Message")
+        # We mock open to fail on the 'r' (read) mode but succeed on 'w' (write)
+        def mocked_open_logic(path, mode, *args, **kwargs):
+            if 'r' in mode:
+                raise IOError("Read Denied")
+            return mock_open()()
+
+        with patch("builtins.open", side_effect=mocked_open_logic):
+            manager.record_event("RECOVERY_TEST", "Message")
             
-        # Verify it re-initialized (wrote fresh instead of crashing)
+        # Verify it re-initialized correctly
         with open(manager.log_path, "r") as f:
             content = f.read()
-            assert "TEST" in content
-            assert "Simulation Engine Performance Audit" in content
+            assert "RECOVERY_TEST" in content
+            # If recovery worked, 'Initial Content' should NOT be here 
+            # because existing_content was reset to ""
+            assert "Initial Content" not in content
 
     def test_record_event_critical_write_failure(self, manager):
-        """Covers Lines 60-62: Raises RuntimeError on disk write failure."""
-        with patch("builtins.open", mock_open()) as mocked_file:
-            # First call to open (read) succeeds (empty), second (write) fails
-            mocked_file.side_effect = [mock_open().return_value, IOError("Disk Full")]
+        """Covers Lines 60-62: Specifically targets the WRITE IOError."""
+        # We need the first open (read) to succeed (return empty) 
+        # and the second open (write) to fail.
+        m = mock_open()
+        # Side effect: 1st call (read) returns a mock file, 2nd call (write) raises error
+        m.side_effect = [m.return_value, IOError("Disk Full")]
+
+        with patch("builtins.open", m):
             with pytest.raises(RuntimeError, match="Could not update performance audit"):
+                # This will call open twice: once at line 50, once at line 58
                 manager.record_event("FAIL", "This should crash")
 
     # --- SECTION 2: ORCHESTRATION MEMORY (JSON) COVERAGE ---
