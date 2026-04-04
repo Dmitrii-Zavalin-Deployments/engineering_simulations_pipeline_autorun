@@ -2,7 +2,6 @@
 
 import pytest
 import dropbox
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from src.io.download_from_dropbox import CloudIngestor
@@ -21,7 +20,7 @@ class TestCloudIngestor:
         is a mock before the Ingestor's __init__ completes.
         """
         with patch("dropbox.Dropbox") as mock_dbx_class:
-            mock_instance = mock_dbx_class.return_value
+            mock_dbx_class.return_value
             # Initialize with dummy data; self.dbx will be our mock_instance
             ci = CloudIngestor(mock_token_manager, "mock_refresh_token", "/tmp/log.txt")
             return ci
