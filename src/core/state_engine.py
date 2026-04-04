@@ -47,6 +47,10 @@ class OrchestrationState:
 
     def hydrate_manifest(self, manifest_json: dict):
         """Enforces Schema Sovereignty before allowing hydration."""
+        
+        if manifest_json.get("project_id") != self.project_id:
+            raise RuntimeError(f"Identity Mismatch: Manifest {manifest_json.get("project_id")} does not match Disk {self.project_id}")
+        
         try:
             with open(self.schema_path, 'r', encoding="utf-8") as s:
                 schema = json.load(s)
