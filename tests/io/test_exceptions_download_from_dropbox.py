@@ -3,7 +3,7 @@
 import pytest
 import dropbox
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 from src.io.download_from_dropbox import CloudIngestor
 
 class TestCloudIngestor:
