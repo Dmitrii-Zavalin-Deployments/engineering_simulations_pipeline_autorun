@@ -1,9 +1,8 @@
 # tests/test_main_engine.py
 
 import pytest
-import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from src.core.constants import OrchestrationStatus, SystemPaths
 from src.main_engine import run_engine
