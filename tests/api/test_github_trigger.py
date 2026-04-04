@@ -117,3 +117,53 @@ class TestDispatcherForensics:
             result = dispatcher.trigger_worker("repo", {"step": "init"})
             assert result is True
             mock_logger.warning.assert_any_call("🛰️ Signal accepted, but no live run indexed yet for repo.")
+        
+    @patch("src.api.github_trigger.time.sleep", return_value=None)
+    @responses.activate
+    def test_traceability_no_runs_indexed(self, mock_sleep, monkeypatch):
+        """Covers Line 93: Handshake accepted, but GitHub indexed 0 runs."""
+        monkeypatch.setenv("GH_PAT", "mock_token")
+        dispatcher = Dispatcher()
+        target_repo = "org/repo"
+        
+        # 1. Success on Dispatch
+        responses.add(responses.POST, f"https://api.github.com/repos/{target_repo}/dispatches", status=204)
+        
+        # 2. Return empty workflow list (Simulating lag in GitHub indexing)
+        responses.add(
+            responses.GET, 
+            f"https://api.github.com/repos/{target_repo}/actions/runs", 
+            json={"workflow_runs": []}, 
+            status=200
+        )
+
+        with patch("src.api.github_trigger.logger") as mock_logger:
+            result = dispatcher.trigger_worker(target_repo, {"step": "test-lag"})
+            assert result is True  # The dispatch itself worked!
+            mock_logger.warning.assert_any_call(f"🛰️ Signal accepted, but no live run indexed yet for {target_repo}.")
+
+    @patch("src.api.github_trigger.time.sleep", return_value=None)
+    @responses.activate
+    def test_traceability_network_exception(self, mock_sleep, monkeypatch):
+        """Covers Lines 94-95: Dispatch success, but Traceability call crashes."""
+        monkeypatch.setenv("GH_PAT", "mock_token")
+        dispatcher = Dispatcher()
+        target_repo = "org/repo"
+
+        # 1. Success on Dispatch
+        responses.add(responses.POST, f"https://api.github.com/repos/{target_repo}/dispatches", status=204)
+        
+        # 2. Simulate a network timeout or DNS failure during the SECOND call
+        responses.add(
+            responses.GET, 
+            f"https://api.github.com/repos/{target_repo}/actions/runs", 
+            body=requests.exceptions.ConnectionError("API Offline")
+        )
+
+        with patch("src.api.github_trigger.logger") as mock_logger:
+            result = dispatcher.trigger_worker(target_repo, {"step": "test-failure"})
+            
+            # The function should still return True because the dispatch was sent.
+            assert result is True 
+            # Verify the specific "Traceability Error" warning was logged.
+            assert any("Traceability Error" in call.args[0] for call in mock_logger.warning.call_args_list)
