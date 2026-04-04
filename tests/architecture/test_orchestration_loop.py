@@ -1,8 +1,6 @@
 # tests/architecture/test_orchestration_loop.py
 
-import pytest
 import json
-from pathlib import Path
 from src.core.bootloader import Bootloader
 from src.core.constants import SystemPaths, OrchestrationStatus
 from src.core.update_ledger import LedgerManager
